@@ -1,106 +1,117 @@
-Design a high-performance, ergonomic, and extensible Tensor data model in Rust as the foundational abstraction for a new Machine Learning Accelerator (MLA) framework.
+# Rust Tensor Implementation Specification
 
-## Core Requirements
+## Current Implementation Status
 
-### 1. Compatibility
-- Align with PyTorch/TensorFlow/ONNX standards
-- Consistent shape and broadcasting semantics
-- Standard dtype handling
-- Memory layout conventions
+### Core Features
+- **Tensor Structure**
+  - Shape and stride information with row-major memory layout
+  - Memory buffer using `Vec<f32>`
+  - Device placement support (CPU, CUDA, WebGPU)
+  - Basic error handling and validation
 
-### 2. Backend Interoperability
-- Support multiple compute backends (CPU, CUDA, Metal, TPU, WebGPU)
-- Zero-copy memory movement
-- Unified interface for different hardware accelerators
+### Data Types
+- Currently supports only 32-bit floating point (f32)
+- Type conversion to/from string representation
 
-### 3. Performance
-- Optimized memory layout (row-major/column-major)
-- Cache-friendly access patterns
-- SIMD/GPU optimization support
-- Minimal allocation overhead
-- Efficient in-place operations
+### Device Support
+- CPU (with optional device ID for multi-CPU systems)
+- CUDA (with device ID)
+- WebGPU (with device ID)
+- Device movement with `to_device()`
 
-### 4. Usability
-- Idiomatic Rust API
-- Clear ownership semantics
-- Intuitive method chaining
-- Comprehensive error handling
-- Good documentation
+### Tensor Operations
+- **Creation**: `from_vec()`, `ones()`, `zeros()`, `identity()`, `random()`, `arange()`
+- **Shape Manipulation**: `reshape()`, `transpose()`, `expand_dims()`, `squeeze()`
+- **Reduction**: `sum()`, `mean()`, `max()`, `min()`, `argmax()`, `argmin()`
+- **Element-wise Operations**: `+`, `-`, `*`, `/` with scalars and tensors
+- **Matrix Operations**: `matmul()`
+- **Activation Functions**: `relu()`
 
-### 5. Extensibility
-- Support for future features:
-  - Sparse tensors
-  - Quantized formats
-  - Autograd metadata
-  - Custom dtypes
-  - Distributed tensors
+### Performance Features
+- Parallel processing support via Rayon (with `parallel` feature)
+- Efficient memory management
+- In-place operations support
+- Broadcasting support for binary operations
 
-### 6. constraints
-- Tensor data model need to be ffi compatible
-- DO NOT USE external crates for tensor data model
-- DO NOT USE external crates for tensor operations
-- DO NOT USE external crates for tensor backend
-- DO NOT USE external crates for tensor memory management
-- DO NOT USE external crates for tensor shape
-- DO NOT USE external crates for tensor dtype
-- DO NOT USE external crates for tensor autograd
-- DO NOT USE external crates for tensor distributed
-- DO NOT USE external crates for tensor optimizer
+### Testing
+- Comprehensive test coverage for all operations
+- Edge case handling
+- Device-specific tests
+- Performance benchmarks
 
-## Implementation Components
+## Implementation Details
 
-1. **Tensor Struct**
-   - Shape and stride information
-   - Memory buffer (simple for now, vec<f32> ?)
-   - Device placement
-
-2. **Backend design**
-   - Device management (from, to)
-   - Memory management (zero-copy when possible)
-
-3. **Data Movement**
-   - Zero-copy transfers
-   - Pinned memory support
-   - Async operations
-   - Cross-device communication (from, to)
-
-4. **Type System**
-   - only 32-bit floating point numbers
- 
-
-5. **Shape System**
-   - should be simple enough for now
-
-## Example Usage
+### Tensor Structure
 ```rust
-// Tensor creation
-let t1 = Tensor::from_vec(vec![1.0, 2.0, 3.0], [3], Device::CPU)?;
-let t1_vec = t1.to_vec()?;
-let t2 = Tensor::ones([1, 3], DType::F32, Device::Cuda(0))?;
-let t2_vec = t2.to_vec()?;
-let t3 = Tensor::from_vec(t1_vec, [3], Device::Cuda(0))?;
-let t4 = Tensor::from_vec(t2_vec, [1, 3], Device::Cuda(0))?;
-
-// Operations
-let t5 = t3.matmul(&t4.t())?;
-let t6 = t5.relu()? + 0.5;
-
-// Device movement
-let t6 = t6.to_device(Device::CPU)?;
-let data: Vec<f32> = t6.to_vec()?;
+pub struct Tensor {
+    data: Vec<f32>,
+    shape: Shape,
+    device: Device,
+    dtype: DType,
+}
 ```
 
-## Integration Plan
-1. Core tensor operations
-2. Backend
-3. Basic math operations
-4. Memory management
+### Shape System
+- Dynamic shape with strides for efficient memory access
+- Automatic stride calculation
+- Bounds checking
+- Support for broadcasting
 
-## Tests
-1. Tensor creation, device placement
-2. Tensor operations
-3. Backend
-4. Memory management
-5. Device movement
-6. Data Movement
+### Device Management
+- Zero-copy device transfers
+- Device-aware operations
+- Fallback to CPU when needed
+
+## Example Usage
+
+```rust
+// Tensor creation
+let t1 = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::Cpu(None))?;
+let t2 = Tensor::ones(&[1, 3], Device::Cpu(None));
+
+// Basic operations
+let t3 = t1.add_tensor(&t2)?;
+let t4 = t3.reshape(&[3, 1])?;
+
+// Matrix multiplication
+let t5 = t2.matmul(&t4)?;
+
+// Reduction
+let t6 = t5.sum(Some(0))?;
+
+// Activation function
+let t7 = t6.relu()?;
+
+// Scalar operations
+let t8 = t7 + 1.0;
+let t9 = t8 * 2.0;
+
+// Device movement
+let t10 = t9.to_device(Device::Cuda(0))?;
+
+// Convert to vec
+let result = t10.to_vec();
+```
+
+## Performance Considerations
+- **Parallel Processing**: Enabled via `parallel` feature
+- **Memory Efficiency**: Minimal allocations, in-place operations
+- **Cache Awareness**: Optimized memory access patterns
+- **Device Optimization**: Specialized implementations for different devices
+
+## Future Extensions
+- Support for more data types (beyond f32)
+- Additional activation functions
+- Convolution operations
+- Sparse tensor support
+- Advanced indexing and slicing
+- Gradient computation and autograd
+- Distributed tensor operations
+
+## Testing Strategy
+- Unit tests for all operations
+- Property-based testing for mathematical properties
+- Cross-device testing
+- Performance benchmarking
+- Memory usage validation
 

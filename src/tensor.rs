@@ -1563,6 +1563,15 @@ impl Mul<f32> for Tensor {
 impl Div<f32> for Tensor {
     type Output = Tensor;
 
+    /// Divides each element of the tensor by a scalar.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
+    ///
+    /// # Panics
+    /// This function will not panic on division by zero, but will return
+    /// positive infinity for all elements in the tensor.
     fn div(mut self, rhs: f32) -> Self::Output {
         trace_fn!("Tensor::div_scalar");
         debug!(
