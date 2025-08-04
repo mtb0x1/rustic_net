@@ -3,20 +3,22 @@
 //! This example demonstrates various tensor operations available in the Rustic Net library,
 //! including parallel processing capabilities.
 
+#[cfg(feature = "parallel")]
+use rustic_net::parallel::init_thread_pool;
 use rustic_net::tensor::{Device, Tensor};
 use rustic_net::RusticNetInitTracingInit;
-use std::thread::available_parallelism;
 use std::time::Instant;
 
 fn main() {
     RusticNetInitTracingInit();
 
+    #[cfg(feature = "parallel")]
+    init_thread_pool();
+
     // Set up the device (CPU with parallel processing)
     let device = Device::default();
 
     // Display available parallelism
-    let num_threads = available_parallelism().map(|n| n.get()).unwrap_or(1);
-    println!("Available CPU threads: {}", num_threads);
 
     // Create a large tensor to demonstrate parallel operations
     let size = 1_000_000; // 1 million elements

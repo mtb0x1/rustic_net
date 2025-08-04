@@ -56,14 +56,25 @@ jobs:
       run: cargo clippy --features parallel -- -D warnings 
 
     - name: Generate docs
-      run: cargo doc --document-private-items
-
-    - name: Deploy docs
-      uses: actions/deploy-pages@v3
+      run: |
+        cargo doc --document-private-items
+        # Create a simple index.html to redirect to the main crate documentation
+        echo '<!DOCTYPE html>
+        <html>
+        <head>
+            <meta http-equiv="refresh" content="0; url=./rustic_net/index.html" />
+        </head>
+        <body>
+            <p>Redirecting to <a href="./rustic_net/index.html">documentation</a>...</p>
+        </body>
+        </html>' > target/doc/index.html
+    
+    - name: Upload documentation
+      uses: actions/upload-artifact@v4
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        branch: gh-pages
-        folder: target/doc
+        name: documentation
+        path: target/doc/
+        retention-days: 1
 
   deploy:
     needs: build-and-test
@@ -75,7 +86,22 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Download documentation artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation
+          path: ./public
+          
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          static_site_generated: true
+          
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'public'
+          
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-      

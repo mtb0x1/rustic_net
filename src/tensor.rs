@@ -244,6 +244,8 @@ impl Tensor {
             let data: Vec<f32> = (0..size * size)
                 .into_par_iter()
                 .map(|i| {
+                    //let curr_thread = std::thread::current().id();
+                    //debug!("identity ====> Thread {:?} processing element {}", curr_thread, i);
                     let row = i / size;
                     let col = i % size;
                     if row == col {
