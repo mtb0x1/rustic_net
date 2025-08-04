@@ -7,6 +7,7 @@
 //! - **Device Management**: Seamless tensor movement between different compute devices
 //! - **No External Dependencies**: Core tensor operations implemented in pure Rust
 //! - **FFI Compatible**: Designed for easy integration with other languages
+//! - **Parallel Processing**: Automatic CPU parallelization with configurable thread pool
 //!
 //! ## Example
 //! ```rust
@@ -23,14 +24,16 @@
 //! assert_eq!(result, vec![1.0, 2.0, 3.0]);
 //! ```
 
+#[cfg(feature = "parallel")]
+pub mod parallel;
+
 pub mod tensor;
 pub(crate) mod tracing;
+
+#[cfg(feature = "parallel")]
+pub use parallel::{current_num_threads, init_thread_pool};
+
 pub use tracing::init_tracing as RusticNetInitTracingInit;
 
 /// Re-exports for common types
 pub use tensor::{DType, Device, Shape, Tensor};
-
-/// Prelude module for convenient imports
-pub mod prelude {
-    pub use crate::tensor::{DType, Device, Shape, Tensor};
-}

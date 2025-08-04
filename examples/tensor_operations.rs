@@ -1,16 +1,27 @@
-//! # Tensor Operations Example
+//! # Tensor Operations Example with Parallel Processing
 //!
-//! This example demonstrates various tensor operations available in the Rustic Net library.
+//! This example demonstrates various tensor operations available in the Rustic Net library,
+//! including parallel processing capabilities.
 
 use rustic_net::tensor::{Device, Tensor};
 use rustic_net::RusticNetInitTracingInit;
+use std::thread::available_parallelism;
+use std::time::Instant;
 
 fn main() {
-
     RusticNetInitTracingInit();
 
-    // Set up the device (CPU in this case)
+    // Set up the device (CPU with parallel processing)
     let device = Device::default();
+
+    // Display available parallelism
+    let num_threads = available_parallelism().map(|n| n.get()).unwrap_or(1);
+    println!("Available CPU threads: {}", num_threads);
+
+    // Create a large tensor to demonstrate parallel operations
+    let size = 1_000_000; // 1 million elements
+    let large_data: Vec<f32> = (0..size).map(|x| x as f32).collect();
+    let large_tensor = Tensor::from_vec(large_data.clone(), &[size], device.clone()).unwrap();
 
     println!("=== Tensor Creation ===");
 
@@ -142,7 +153,48 @@ fn main() {
     let relu = m.relu().unwrap();
     println!("\nReLU of {:?} = {:?}", m.to_vec(), relu.to_vec());
 
+    // Benchmark parallel operations
+    println!("\n=== Benchmarking Parallel Operations ===");
+
+    // Benchmark parallel sum
+    let start = Instant::now();
+    let sum = large_tensor.sum(None).unwrap();
+    let duration = start.elapsed();
+    println!(
+        "Parallel sum of {} elements: {:.2} (took {:?})",
+        size,
+        sum.to_vec()[0],
+        duration
+    );
+
+    // Benchmark element-wise operations
+    let start = Instant::now();
+    let _result = large_tensor.clone() + 1.0;
+    let duration = start.elapsed();
+    println!("Parallel element-wise addition: {:?}", duration);
+
+    // Benchmark matrix multiplication (if size is appropriate)
+    if size <= 10_000 {
+        // Keep it reasonable for demonstration
+        let m = (size as f32).sqrt() as usize;
+        let square_tensor = Tensor::from_vec(
+            (0..m * m).map(|x| x as f32).collect::<Vec<f32>>(),
+            &[m, m],
+            device.clone(),
+        )
+        .unwrap();
+
+        let start = Instant::now();
+        let _result = square_tensor.matmul(&square_tensor.transpose(None).unwrap());
+        let duration = start.elapsed();
+        println!(
+            "Parallel matrix multiplication ({}x{}): {:?}",
+            m, m, duration
+        );
+    }
+
     println!("\n=== Example completed!");
     println!("Check the console output above for detailed tracing information.");
-    println!("set/export RUST_LOG to rustic_net=trace for maximum detail, or RUST_LOG=rustic_net=info for high-level info.");
+    println!("Set RUST_LOG=rustic_net=info for high-level info or RUST_LOG=rustic_net=trace for maximum detail.");
+    println!("Control parallelism with RAYON_NUM_THREADS environment variable (e.g., RAYON_NUM_THREADS=4).");
 }

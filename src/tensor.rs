@@ -4,8 +4,11 @@ use std::fmt;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 use tracing::{debug, error};
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 /// Represents the device where tensor data is stored
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Device {
     /// CPU device with optional device ID (useful for multi-CPU systems)
     Cpu(Option<usize>),
@@ -226,63 +229,189 @@ impl Tensor {
     }
 
     /// Creates an identity matrix of the given size
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, the matrix initialization
+    /// will be parallelized for better performance with large matrices.
     pub fn identity(size: usize, device: Device) -> Self {
         trace_fn!("Tensor::identity");
         debug!("Creating identity matrix of size: {}", size);
 
-        let mut data = vec![0.0; size * size];
-        for i in 0..size {
-            data[i * size + i] = 1.0;
+        #[cfg(feature = "parallel")]
+        {
+            debug!("Using parallel identity matrix initialization");
+
+            let data: Vec<f32> = (0..size * size)
+                .into_par_iter()
+                .map(|i| {
+                    let row = i / size;
+                    let col = i % size;
+                    if row == col {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            let tensor = Tensor {
+                data,
+                shape: Shape::new(&[size, size]),
+                device,
+                dtype: DType::F32,
+            };
+
+            debug!(
+                "Created parallel identity matrix with shape: {:?}",
+                tensor.shape()
+            );
+            tensor
         }
 
-        let tensor = Tensor {
-            data,
-            shape: Shape::new(&[size, size]),
-            device,
-            dtype: DType::F32,
-        };
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!("Using sequential identity matrix initialization");
+            let mut data = vec![0.0; size * size];
+            for i in 0..size {
+                data[i * size + i] = 1.0;
+            }
 
-        debug!("Created identity matrix with shape: {:?}", tensor.shape());
-        tensor
+            let tensor = Tensor {
+                data,
+                shape: Shape::new(&[size, size]),
+                device,
+                dtype: DType::F32,
+            };
+
+            debug!(
+                "Created sequential identity matrix with shape: {:?}",
+                tensor.shape()
+            );
+            tensor
+        }
     }
 
     /// Creates a new tensor with random values between 0.0 and 1.0
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, random number generation
+    /// will be parallelized for better performance with large tensors.
     pub fn random(shape: &[usize], device: Device) -> Self {
         trace_fn!("Tensor::random");
         debug!("Creating random tensor with shape: {:?}", shape);
 
         let len: usize = shape.iter().product();
-        let mut rng = rand::rng();
-        let data: Vec<f32> = (0..len).map(|_| rng.random_range(0.0..1.0)).collect();
 
-        let tensor = Tensor {
-            data,
-            shape: Shape::new(shape),
-            device,
-            dtype: DType::F32,
-        };
+        #[cfg(feature = "parallel")]
+        {
+            debug!("Using parallel random number generation");
+            use rand::distr::Uniform;
+            use rand::rngs::StdRng;
+            use rand::SeedableRng;
+            let uniform = match Uniform::new(0.0f32, 1.0) {
+                Ok(uniform) => uniform,
+                Err(e) => {
+                    error!("Failed to create uniform distribution: {}", e);
+                    panic!("Failed to create uniform distribution: {e}");
+                }
+            };
 
-        debug!("Created random tensor with shape: {:?}", tensor.shape());
-        tensor
+            // Generate random numbers in parallel with independent RNGs per thread
+            let data: Vec<f32> = (0..len)
+                .into_par_iter()
+                .map_init(
+                    || StdRng::from_rng(&mut rand::rng()), // Per-thread RNG
+                    |rng, _| rng.sample(uniform),
+                )
+                .collect();
+
+            let tensor = Tensor {
+                data,
+                shape: Shape::new(shape),
+                device,
+                dtype: DType::F32,
+            };
+
+            debug!(
+                "Created parallel random tensor with shape: {:?}",
+                tensor.shape()
+            );
+            tensor
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!("Using sequential random number generation");
+            let mut rng = rand::rng();
+            let data: Vec<f32> = (0..len).map(|_| rng.random_range(0.0..1.0)).collect();
+
+            let tensor = Tensor {
+                data,
+                shape: Shape::new(shape),
+                device,
+                dtype: DType::F32,
+            };
+
+            debug!(
+                "Created sequential random tensor with shape: {:?}",
+                tensor.shape()
+            );
+            tensor
+        }
     }
 
     /// Creates a new 1D tensor with values from start to end (exclusive) with step size 1
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, the range generation
+    /// will be parallelized for better performance with large ranges.
     pub fn arange(start: f32, end: f32) -> Self {
         trace_fn!("Tensor::arange");
         debug!("Creating arange tensor from {} to {}", start, end);
 
         let len = (end - start) as usize;
-        let data: Vec<f32> = (0..len).map(|i| start + i as f32).collect();
 
-        let tensor = Tensor {
-            data,
-            shape: Shape::new(&[len]),
-            device: Device::default(),
-            dtype: DType::F32,
-        };
+        #[cfg(feature = "parallel")]
+        {
+            debug!("Using parallel arange generation");
+            let chunk_size = (len / rayon::current_num_threads().max(1)).max(1);
+            let data: Vec<f32> = (0..len)
+                .into_par_iter()
+                .with_min_len(chunk_size)
+                .map(|i| start + i as f32)
+                .collect();
 
-        debug!("Created arange tensor with shape: {:?}", tensor.shape());
-        tensor
+            let tensor = Tensor {
+                data,
+                shape: Shape::new(&[len]),
+                device: Device::default(),
+                dtype: DType::F32,
+            };
+
+            debug!(
+                "Created parallel arange tensor with shape: {:?}",
+                tensor.shape()
+            );
+            tensor
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!("Using sequential arange generation");
+            let data: Vec<f32> = (0..len).map(|i| start + i as f32).collect();
+
+            let tensor = Tensor {
+                data,
+                shape: Shape::new(&[len]),
+                device: Device::default(),
+                dtype: DType::F32,
+            };
+
+            debug!(
+                "Created sequential arange tensor with shape: {:?}",
+                tensor.shape()
+            );
+            tensor
+        }
     }
 
     /// Creates a new tensor from a slice with the given shape
@@ -377,6 +506,10 @@ impl Tensor {
     }
 
     /// Transposes the tensor according to the given axes
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     pub fn transpose(&self, axes: Option<&[usize]>) -> Result<Self, String> {
         trace_fn!("Tensor::transpose");
 
@@ -384,7 +517,7 @@ impl Tensor {
         let axes = axes.map_or_else(|| (0..ndim).rev().collect::<Vec<_>>(), |ax| ax.to_vec());
 
         if axes.len() != ndim {
-            let err = format!("Axes {axes:?} don't match tensor dimensions {ndim}",);
+            let err = format!("Axes {axes:?} don't match tensor dimensions {ndim}");
             error!("{}", err);
             return Err(err);
         }
@@ -395,13 +528,28 @@ impl Tensor {
             let cols = self.shape()[1];
             let mut data = vec![0.0; self.data.len()];
 
-            for i in 0..rows {
-                for j in 0..cols {
-                    data[j * rows + i] = self.data[i * cols + j];
+            #[cfg(feature = "parallel")]
+            {
+                debug!("Using parallel 2D transpose ({}x{})", rows, cols);
+                let src = &self.data;
+                data.par_chunks_mut(rows).enumerate().for_each(|(j, col)| {
+                    for i in 0..rows {
+                        col[i] = src[i * cols + j];
+                    }
+                });
+            }
+
+            #[cfg(not(feature = "parallel"))]
+            {
+                debug!("Using sequential 2D transpose ({}x{})", rows, cols);
+                for i in 0..rows {
+                    for j in 0..cols {
+                        data[j * rows + i] = self.data[i * cols + j];
+                    }
                 }
             }
 
-            return Tensor::from_vec(data, &[cols, rows], self.device.clone());
+            return Tensor::from_vec(data, &[cols, rows], self.device);
         }
 
         // For higher dimensions, we need a more general approach
@@ -436,6 +584,10 @@ impl Tensor {
 
     /// Computes the sum of tensor elements along the specified axis
     /// If axis is None, sums all elements
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     pub fn sum(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::sum");
         debug!("Computing sum along axis: {:?}", axis);
@@ -443,7 +595,7 @@ impl Tensor {
         match axis {
             Some(ax) => {
                 if ax >= self.shape().len() {
-                    let err = format!("Axis {ax} is out of bounds for tensor dimensions",);
+                    let err = format!("Axis {ax} is out of bounds for tensor dimensions");
                     error!("{}", err);
                     return Err(err);
                 }
@@ -455,25 +607,52 @@ impl Tensor {
                 // A more complete implementation would handle ND tensors
                 if self.shape().len() == 1 {
                     let sum = self.data.iter().sum();
-                    Tensor::from_vec(vec![sum], &[1], self.device.clone())
+                    Tensor::from_vec(vec![sum], &[1], self.device)
                 } else if self.shape().len() == 2 {
                     let (rows, cols) = (self.shape()[0], self.shape()[1]);
-                    if ax == 0 {
-                        // Sum along rows (axis 0)
-                        let mut result = vec![0.0; cols];
-                        for i in 0..rows {
-                            for (j, item) in result.iter_mut().enumerate().take(cols) {
-                                *item += self.data[i * cols + j];
+
+                    #[cfg(feature = "parallel")]
+                    {
+                        debug!("Using parallel sum along axis {}", ax);
+                        let data = &self.data;
+
+                        if ax == 0 {
+                            // Sum along rows (axis 0)
+                            let result: Vec<f32> = (0..cols)
+                                .into_par_iter()
+                                .map(|j| (0..rows).map(|i| data[i * cols + j]).sum())
+                                .collect();
+                            Tensor::from_vec(result, &[1, cols], self.device)
+                        } else {
+                            // Sum along columns (axis 1)
+                            let result: Vec<f32> = (0..rows)
+                                .into_par_iter()
+                                .map(|i| data[i * cols..(i + 1) * cols].iter().sum())
+                                .collect();
+                            Tensor::from_vec(result, &[rows, 1], self.device)
+                        }
+                    }
+
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        debug!("Using sequential sum along axis {}", ax);
+                        if ax == 0 {
+                            // Sum along rows (axis 0)
+                            let mut result = vec![0.0; cols];
+                            for i in 0..rows {
+                                for (j, item) in result.iter_mut().enumerate().take(cols) {
+                                    *item += self.data[i * cols + j];
+                                }
                             }
+                            Tensor::from_vec(result, &[1, cols], self.device)
+                        } else {
+                            // Sum along columns (axis 1)
+                            let mut result = vec![0.0; rows];
+                            for (i, item) in result.iter_mut().enumerate().take(rows) {
+                                *item = self.data[i * cols..(i + 1) * cols].iter().sum();
+                            }
+                            Tensor::from_vec(result, &[rows, 1], self.device)
                         }
-                        Tensor::from_vec(result, &[1, cols], self.device.clone())
-                    } else {
-                        // Sum along columns (axis 1)
-                        let mut result = vec![0.0; rows];
-                        for (i, item) in result.iter_mut().enumerate().take(rows) {
-                            *item = self.data[i * cols..(i + 1) * cols].iter().sum();
-                        }
-                        Tensor::from_vec(result, &[rows, 1], self.device.clone())
                     }
                 } else {
                     // For higher dimensions, return a placeholder
@@ -485,8 +664,19 @@ impl Tensor {
             }
             None => {
                 // Sum all elements
-                let sum = self.data.iter().sum();
-                Tensor::from_vec(vec![sum], &[1], self.device.clone())
+                #[cfg(feature = "parallel")]
+                {
+                    debug!("Using parallel global sum");
+                    let sum = self.data.par_iter().sum();
+                    Tensor::from_vec(vec![sum], &[1], self.device)
+                }
+
+                #[cfg(not(feature = "parallel"))]
+                {
+                    debug!("Using sequential global sum");
+                    let sum = self.data.iter().sum();
+                    Tensor::from_vec(vec![sum], &[1], self.device)
+                }
             }
         }
     }
@@ -542,9 +732,13 @@ impl Tensor {
     }
 
     /// Helper function for reduction operations along an axis
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn reduce_axis<F>(&self, axis: Option<usize>, reduce_op: F, init: f32) -> Result<Self, String>
     where
-        F: Fn(f32, &f32) -> f32,
+        F: Fn(f32, &f32) -> f32 + Send + Sync,
     {
         match axis {
             Some(ax) => {
@@ -557,28 +751,75 @@ impl Tensor {
 
                 // For simplicity, implement for 1D and 2D tensors
                 if self.shape().len() == 1 {
-                    let max = self.data.iter().fold(init, &reduce_op);
-                    Tensor::from_vec(vec![max], &[1], self.device.clone())
+                    #[cfg(feature = "parallel")]
+                    {
+                        debug!("Using parallel 1D reduction");
+                        let result = self
+                            .data
+                            .par_iter()
+                            .fold(|| init, &reduce_op)
+                            .reduce(|| init, |a, b| reduce_op(a, &b));
+                        Tensor::from_vec(vec![result], &[1], self.device)
+                    }
+
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        debug!("Using sequential 1D reduction");
+                        let result = self.data.iter().fold(init, &reduce_op);
+                        Tensor::from_vec(vec![result], &[1], self.device)
+                    }
                 } else if self.shape().len() == 2 {
                     let (rows, cols) = (self.shape()[0], self.shape()[1]);
-                    if ax == 0 {
-                        // Reduce along rows (axis 0)
-                        let mut result = vec![init; cols];
-                        for i in 0..rows {
-                            for (j, item) in result.iter_mut().enumerate().take(cols) {
-                                *item = reduce_op(*item, &self.data[i * cols + j]);
+
+                    #[cfg(feature = "parallel")]
+                    {
+                        debug!("Using parallel 2D reduction along axis {}", ax);
+                        let data = &self.data;
+
+                        if ax == 0 {
+                            // Parallel reduction along rows (axis 0)
+                            let result: Vec<f32> = (0..cols)
+                                .into_par_iter()
+                                .map(|j| {
+                                    (0..rows)
+                                        .fold(init, |acc, i| reduce_op(acc, &data[i * cols + j]))
+                                })
+                                .collect();
+                            Tensor::from_vec(result, &[1, cols], self.device)
+                        } else {
+                            // Parallel reduction along columns (axis 1)
+                            let result: Vec<f32> = (0..rows)
+                                .into_par_iter()
+                                .map(|i| {
+                                    data[i * cols..(i + 1) * cols].iter().fold(init, &reduce_op)
+                                })
+                                .collect();
+                            Tensor::from_vec(result, &[rows, 1], self.device)
+                        }
+                    }
+
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        debug!("Using sequential 2D reduction along axis {}", ax);
+                        if ax == 0 {
+                            // Reduce along rows (axis 0)
+                            let mut result = vec![init; cols];
+                            for i in 0..rows {
+                                for (j, item) in result.iter_mut().enumerate().take(cols) {
+                                    *item = reduce_op(*item, &self.data[i * cols + j]);
+                                }
                             }
+                            Tensor::from_vec(result, &[1, cols], self.device)
+                        } else {
+                            // Reduce along columns (axis 1)
+                            let mut result = vec![init; rows];
+                            for (i, item) in result.iter_mut().enumerate().take(rows) {
+                                *item = self.data[i * cols..(i + 1) * cols]
+                                    .iter()
+                                    .fold(init, &reduce_op);
+                            }
+                            Tensor::from_vec(result, &[rows, 1], self.device)
                         }
-                        Tensor::from_vec(result, &[1, cols], self.device.clone())
-                    } else {
-                        // Reduce along columns (axis 1)
-                        let mut result = vec![init; rows];
-                        for (i, item) in result.iter_mut().enumerate().take(rows) {
-                            *item = self.data[i * cols..(i + 1) * cols]
-                                .iter()
-                                .fold(init, &reduce_op);
-                        }
-                        Tensor::from_vec(result, &[rows, 1], self.device.clone())
                     }
                 } else {
                     // For higher dimensions, return a placeholder
@@ -588,16 +829,35 @@ impl Tensor {
             }
             None => {
                 // Global reduction
-                let result = self.data.iter().fold(init, &reduce_op);
-                Tensor::from_vec(vec![result], &[1], self.device.clone())
+                #[cfg(feature = "parallel")]
+                {
+                    debug!("Using parallel global reduction");
+                    let result = self
+                        .data
+                        .par_iter()
+                        .fold(|| init, &reduce_op)
+                        .reduce(|| init, |a, b| reduce_op(a, &b));
+                    Tensor::from_vec(vec![result], &[1], self.device)
+                }
+
+                #[cfg(not(feature = "parallel"))]
+                {
+                    debug!("Using sequential global reduction");
+                    let result = self.data.iter().fold(init, &reduce_op);
+                    Tensor::from_vec(vec![result], &[1], self.device)
+                }
             }
         }
     }
 
     /// Helper function for arg reduction operations along an axis
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn arg_reduce_axis<F>(&self, axis: Option<usize>, compare: F) -> Result<Self, String>
     where
-        F: Fn(f32, f32) -> bool,
+        F: Fn(f32, f32) -> bool + Send + Sync,
     {
         match axis {
             Some(ax) => {
@@ -611,54 +871,140 @@ impl Tensor {
 
                 // For simplicity, implement for 1D and 2D tensors
                 if self.shape().len() == 1 {
-                    let (idx, _) = self.data.iter().enumerate().fold(
-                        (0, &self.data[0]),
-                        |(max_idx, max_val), (i, val)| {
-                            if compare(*val, *max_val) {
-                                (i, val)
-                            } else {
-                                (max_idx, max_val)
-                            }
-                        },
-                    );
-                    Tensor::from_vec(vec![idx as f32], &[1], self.device.clone())
-                } else if self.shape().len() == 2 {
-                    let (rows, cols) = (self.shape()[0], self.shape()[1]);
-                    if ax == 0 {
-                        // Arg reduce along rows (axis 0)
-                        let mut result = vec![0.0; cols];
-                        for (j, item) in result.iter_mut().enumerate().take(cols) {
-                            let mut max_idx = 0;
-                            let mut max_val = self.data[j];
-                            for i in 1..rows {
-                                let val = self.data[i * cols + j];
-                                if compare(val, max_val) {
-                                    max_val = val;
-                                    max_idx = i;
-                                }
-                            }
-                            *item = max_idx as f32;
-                        }
-                        Tensor::from_vec(result, &[1, cols], self.device.clone())
-                    } else {
-                        // Arg reduce along columns (axis 1)
-                        let mut result = vec![0.0; rows];
-                        for (i, item) in result.iter_mut().enumerate().take(rows) {
-                            let start = i * cols;
-                            let end = start + cols;
-                            let (idx, _) = self.data[start..end].iter().enumerate().fold(
-                                (0, &self.data[start]),
-                                |(max_idx, max_val), (j, val)| {
+                    #[cfg(feature = "parallel")]
+                    {
+                        debug!("Using parallel 1D arg reduction");
+                        let (idx, _) = self
+                            .data
+                            .par_iter()
+                            .enumerate()
+                            .fold(
+                                || (0, &self.data[0]),
+                                |(max_idx, max_val), (i, val)| {
                                     if compare(*val, *max_val) {
-                                        (j, val)
+                                        (i, val)
                                     } else {
                                         (max_idx, max_val)
                                     }
                                 },
+                            )
+                            .reduce(
+                                || (0, &self.data[0]),
+                                |a, b| {
+                                    if compare(*b.1, *a.1) {
+                                        b
+                                    } else {
+                                        a
+                                    }
+                                },
                             );
-                            *item = idx as f32;
+                        Tensor::from_vec(vec![idx as f32], &[1], self.device)
+                    }
+
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        debug!("Using sequential 1D arg reduction");
+                        let (idx, _) = self.data.iter().enumerate().fold(
+                            (0, &self.data[0]),
+                            |(max_idx, max_val), (i, val)| {
+                                if compare(*val, *max_val) {
+                                    (i, val)
+                                } else {
+                                    (max_idx, max_val)
+                                }
+                            },
+                        );
+                        Tensor::from_vec(vec![idx as f32], &[1], self.device)
+                    }
+                } else if self.shape().len() == 2 {
+                    let (rows, cols) = (self.shape()[0], self.shape()[1]);
+
+                    #[cfg(feature = "parallel")]
+                    {
+                        debug!("Using parallel 2D arg reduction along axis {}", ax);
+                        let data = &self.data;
+
+                        if ax == 0 {
+                            // Parallel arg reduction along rows (axis 0)
+                            let result: Vec<f32> = (0..cols)
+                                .into_par_iter()
+                                .map(|j| {
+                                    let mut max_idx = 0;
+                                    let mut max_val = data[j];
+                                    for i in 1..rows {
+                                        let val = data[i * cols + j];
+                                        if compare(val, max_val) {
+                                            max_val = val;
+                                            max_idx = i;
+                                        }
+                                    }
+                                    max_idx as f32
+                                })
+                                .collect();
+                            Tensor::from_vec(result, &[1, cols], self.device)
+                        } else {
+                            // Parallel arg reduction along columns (axis 1)
+                            let result: Vec<f32> = (0..rows)
+                                .into_par_iter()
+                                .map(|i| {
+                                    let start = i * cols;
+                                    let end = start + cols;
+                                    let (idx, _) = data[start..end].iter().enumerate().fold(
+                                        (0, &data[start]),
+                                        |(max_idx, max_val), (j, val)| {
+                                            if compare(*val, *max_val) {
+                                                (j, val)
+                                            } else {
+                                                (max_idx, max_val)
+                                            }
+                                        },
+                                    );
+                                    idx as f32
+                                })
+                                .collect();
+                            Tensor::from_vec(result, &[rows, 1], self.device)
                         }
-                        Tensor::from_vec(result, &[rows, 1], self.device.clone())
+                    }
+
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        debug!("Using sequential 2D arg reduction along axis {}", ax);
+                        if ax == 0 {
+                            // Arg reduce along rows (axis 0)
+                            let mut result = vec![0.0; cols];
+                            for (j, item) in result.iter_mut().enumerate().take(cols) {
+                                let mut max_idx = 0;
+                                let mut max_val = self.data[j];
+                                for i in 1..rows {
+                                    let val = self.data[i * cols + j];
+                                    if compare(val, max_val) {
+                                        max_val = val;
+                                        max_idx = i;
+                                    }
+                                }
+                                *item = max_idx as f32;
+                            }
+                            Tensor::from_vec(result, &[1, cols], self.device)
+                        } else {
+                            // Arg reduce along columns (axis 1)
+                            let mut result = vec![0.0; rows];
+                            for (i, item) in result.iter_mut().enumerate().take(rows) {
+                                let start = i * cols;
+                                let end = start + cols;
+                                let (idx, _) = self.data[start..end].iter().enumerate().fold(
+                                    (0, &self.data[start]),
+                                    |(max_idx, max_val), (j, val)| {
+                                        if compare(*val, *max_val) {
+                                            (j, val)
+                                        } else {
+                                            (max_idx, max_val)
+                                        }
+                                    },
+                                );
+                                *item = idx as f32;
+                            }
+                            Tensor::from_vec(result, &[rows, 1], self.device)
+                        }
                     }
                 } else {
                     // For higher dimensions, return a placeholder
@@ -671,29 +1017,73 @@ impl Tensor {
             }
             None => {
                 // Global arg reduction
-                let (idx, _) = self.data.iter().enumerate().fold(
-                    (0, &self.data[0]),
-                    |(max_idx, max_val), (i, val)| {
-                        if compare(*val, *max_val) {
-                            (i, val)
-                        } else {
-                            (max_idx, max_val)
-                        }
-                    },
-                );
-                Tensor::from_vec(vec![idx as f32], &[1], self.device.clone())
+                #[cfg(feature = "parallel")]
+                {
+                    debug!("Using parallel global arg reduction");
+                    let (idx, _) = self
+                        .data
+                        .par_iter()
+                        .enumerate()
+                        .fold(
+                            || (0, &self.data[0]),
+                            |(max_idx, max_val), (i, val)| {
+                                if compare(*val, *max_val) {
+                                    (i, val)
+                                } else {
+                                    (max_idx, max_val)
+                                }
+                            },
+                        )
+                        .reduce(
+                            || (0, &self.data[0]),
+                            |a, b| {
+                                if compare(*b.1, *a.1) {
+                                    b
+                                } else {
+                                    a
+                                }
+                            },
+                        );
+                    Tensor::from_vec(vec![idx as f32], &[1], self.device)
+                }
+
+                #[cfg(not(feature = "parallel"))]
+                {
+                    debug!("Using sequential global arg reduction");
+                    let (idx, _) = self.data.iter().enumerate().fold(
+                        (0, &self.data[0]),
+                        |(max_idx, max_val), (i, val)| {
+                            if compare(*val, *max_val) {
+                                (i, val)
+                            } else {
+                                (max_idx, max_val)
+                            }
+                        },
+                    );
+                    Tensor::from_vec(vec![idx as f32], &[1], self.device)
+                }
             }
         }
     }
 
     /// Removes dimensions of size 1
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     pub fn squeeze(&self, axis: Option<usize>) -> Self {
         trace_fn!("Tensor::squeeze");
+        debug!(
+            "Squeezing tensor with shape: {:?}, axis: {:?}",
+            self.shape(),
+            axis
+        );
 
         let new_shape: Vec<usize> = match axis {
             Some(ax) => {
                 if ax >= self.shape().len() || self.shape()[ax] != 1 {
                     // If axis is out of bounds or dimension is not 1, return original
+                    debug!("No dimensions to squeeze, returning original tensor");
                     return self.clone();
                 }
                 self.shape()
@@ -710,13 +1100,26 @@ impl Tensor {
 
         // If all dimensions are removed, return a scalar in a 1D tensor
         if new_shape.is_empty() {
-            return Tensor::from_vec(vec![self.data[0]], &[1], self.device.clone())
-                .unwrap_or_else(|_| self.clone());
+            debug!("All dimensions squeezed, returning scalar in 1D tensor");
+            return Tensor::from_vec(vec![self.data[0]], &[1], self.device).unwrap_or_else(|_| {
+                error!("Failed to create scalar tensor, returning original");
+                self.clone()
+            });
         }
 
+        // Reshape the tensor to the new shape
         match self.reshape(&new_shape) {
-            Ok(tensor) => tensor,
-            Err(_) => self.clone(), // Return original if reshape fails
+            Ok(tensor) => {
+                debug!(
+                    "Successfully squeezed tensor to shape: {:?}",
+                    tensor.shape()
+                );
+                tensor
+            }
+            Err(e) => {
+                error!("Failed to reshape tensor during squeeze: {}", e);
+                self.clone() // Return original if reshape fails
+            }
         }
     }
 
@@ -768,12 +1171,30 @@ impl Tensor {
                 error!("{}: {:?} and {:?}", err, self.shape(), other.shape());
                 return Err(err);
             }
-            let dot_product = self
-                .data
-                .iter()
-                .zip(&other.data)
-                .fold(0.0, |acc, (&a, &b)| acc + a * b);
-            return Tensor::from_vec(vec![dot_product], &[1], self.device.clone());
+
+            #[cfg(feature = "parallel")]
+            {
+                // TODO : map vs fold in not parallel version
+                debug!("Using parallel dot product");
+                let dot_product = self
+                    .data
+                    .par_iter()
+                    .zip(&other.data)
+                    .map(|(&a, &b)| a * b)
+                    .sum();
+                return Tensor::from_vec(vec![dot_product], &[1], self.device);
+            }
+
+            #[cfg(not(feature = "parallel"))]
+            {
+                debug!("Using sequential dot product");
+                let dot_product = self
+                    .data
+                    .iter()
+                    .zip(&other.data)
+                    .fold(0.0, |acc, (&a, &b)| acc + a * b);
+                return Tensor::from_vec(vec![dot_product], &[1], self.device);
+            }
         }
 
         // Handle 2D x 2D or 2D x 1D matrix multiplication
@@ -797,19 +1218,49 @@ impl Tensor {
         }
 
         let mut result_data = vec![0.0; m * n];
-        for i in 0..m {
-            for j in 0..n {
-                let mut sum = 0.0;
-                for k in 0..k1 {
-                    let a_idx = i * k1 + k;
-                    let b_idx = if other.shape().len() == 2 {
-                        k * n + j
-                    } else {
-                        k
-                    };
-                    sum += self.data[a_idx] * other.data[b_idx];
+        let other_ndim = other.shape().len();
+
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel matrix multiplication ({}x{} * {}x{})",
+                m, k1, k2, n
+            );
+            let a_data = &self.data;
+            let b_data = &other.data;
+
+            result_data
+                .par_chunks_mut(n)
+                .enumerate()
+                .for_each(|(i, row)| {
+                    for (j, item) in row.iter_mut().enumerate().take(n) {
+                        let mut sum = 0.0;
+                        for k in 0..k1 {
+                            let a_idx = i * k1 + k;
+                            let b_idx = if other_ndim == 2 { k * n + j } else { k };
+                            sum += a_data[a_idx] * b_data[b_idx];
+                        }
+                        *item = sum;
+                    }
+                });
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!(
+                "Using sequential matrix multiplication ({}x{} * {}x{})",
+                m, k1, k2, n
+            );
+            for i in 0..m {
+                for j in 0..n {
+                    let mut sum = 0.0;
+                    for k in 0..k1 {
+                        let a_idx = i * k1 + k;
+                        let b_idx = if other_ndim == 2 { k * n + j } else { k };
+                        sum += self.data[a_idx] * other.data[b_idx];
+                    }
+                    result_data[i * n + j] = sum;
                 }
-                result_data[i * n + j] = sum;
             }
         }
 
@@ -819,22 +1270,40 @@ impl Tensor {
             vec![m]
         };
 
-        let result = Tensor::from_vec(result_data, &result_shape, self.device.clone())?;
+        let result = Tensor::from_vec(result_data, &result_shape, self.device)?;
         debug!("Matrix multiplication result shape: {:?}", result.shape());
         Ok(result)
     }
 
     /// Applies the ReLU activation function element-wise.
+    /// This operation is parallelized for tensors larger than MIN_PARALLEL_SIZE
+    /// when the 'parallel' feature is enabled.
     pub fn relu(&self) -> Result<Tensor, String> {
         trace_fn!("Tensor::relu");
-        debug!("Applying ReLU to tensor with shape: {:?}", self.shape());
+        debug!(
+            "Applying ReLU activation to tensor with shape {:?}",
+            self.shape()
+        );
 
         let mut result = self.clone();
-        for x in &mut result.data {
-            *x = x.max(0.0);
+
+        #[cfg(feature = "parallel")]
+        {
+            debug!("Using parallel ReLU ({} elements)", result.data.len());
+            result.data.par_iter_mut().for_each(|x| {
+                *x = x.max(0.0);
+            });
         }
 
-        debug!("ReLU applied successfully");
+        // Sequential implementation (used when parallel is disabled or for small tensors)
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!("Using sequential ReLU ({} elements)", result.data.len());
+            for x in &mut result.data {
+                *x = x.max(0.0);
+            }
+        }
+
         Ok(result)
     }
 
@@ -885,7 +1354,7 @@ impl Tensor {
                 if a == 0.0 {
                     0.0
                 } else {
-                    a.signum() * f32::INFINITY
+                    f32::INFINITY
                 }
             } else {
                 a / b
@@ -894,9 +1363,13 @@ impl Tensor {
     }
 
     /// Helper function for binary operations with broadcasting support.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn binary_op<F>(&self, other: &Tensor, op: F) -> Result<Tensor, String>
     where
-        F: Fn(f32, f32) -> f32,
+        F: Fn(f32, f32) -> f32 + Send + Sync,
     {
         trace_fn!("Tensor::binary_op");
         debug!(
@@ -915,16 +1388,31 @@ impl Tensor {
         }
 
         debug!("Performing element-wise operation between tensors");
-        let result_data: Vec<f32> = self
-            .data
-            .iter()
-            .zip(&other.data)
-            .map(|(&a, &b)| op(a, b))
-            .collect();
+        let len = self.data.len();
+        let mut result_data = vec![0.0; len];
+
+        #[cfg(feature = "parallel")]
+        {
+            debug!("Using parallel binary operation ({} elements)", len);
+            result_data
+                .par_iter_mut()
+                .zip(self.data.par_iter().zip(other.data.par_iter()))
+                .for_each(|(r, (&a, &b))| {
+                    *r = op(a, b);
+                });
+        }
+
+        // Sequential implementation (used when parallel is disabled or for small tensors)
+        debug!("Using sequential binary operation ({} elements)", len);
+        result_data
+            .iter_mut()
+            .zip(self.data.iter().zip(other.data.iter()))
+            .for_each(|(r, (&a, &b))| {
+                *r = op(a, b);
+            });
 
         debug!("Binary operation completed successfully");
-        let result = Tensor::from_vec(result_data, self.shape(), self.device.clone());
-        result
+        Tensor::from_vec(result_data, self.shape(), self.device)
     }
 }
 
@@ -933,7 +1421,7 @@ impl Clone for Tensor {
         Tensor {
             data: self.data.clone(),
             shape: self.shape.clone(),
-            device: self.device.clone(),
+            device: self.device,
             dtype: self.dtype,
         }
     }
@@ -943,6 +1431,11 @@ impl Clone for Tensor {
 impl Add<f32> for Tensor {
     type Output = Tensor;
 
+    /// Adds a scalar to each element of the tensor.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn add(mut self, rhs: f32) -> Self::Output {
         trace_fn!("Tensor::add_scalar");
         debug!(
@@ -951,8 +1444,27 @@ impl Add<f32> for Tensor {
             self.shape()
         );
 
-        for x in &mut self.data {
-            *x += rhs;
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel scalar addition ({} elements)",
+                self.data.len()
+            );
+            self.data.par_iter_mut().for_each(|x| {
+                *x += rhs;
+            });
+        }
+
+        // Sequential implementation (used when parallel is disabled or for small tensors)
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!(
+                "Using sequential scalar addition ({} elements)",
+                self.data.len()
+            );
+            for x in &mut self.data {
+                *x += rhs;
+            }
         }
 
         debug!("Scalar addition completed");
@@ -963,6 +1475,11 @@ impl Add<f32> for Tensor {
 impl Sub<f32> for Tensor {
     type Output = Tensor;
 
+    /// Subtracts a scalar from each element of the tensor.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn sub(mut self, rhs: f32) -> Self::Output {
         trace_fn!("Tensor::sub_scalar");
         debug!(
@@ -971,8 +1488,27 @@ impl Sub<f32> for Tensor {
             self.shape()
         );
 
-        for x in &mut self.data {
-            *x -= rhs;
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel scalar subtraction ({} elements)",
+                self.data.len()
+            );
+            self.data.par_iter_mut().for_each(|x| {
+                *x -= rhs;
+            });
+        }
+
+        // Sequential implementation (used when parallel is disabled or for small tensors)
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!(
+                "Using sequential scalar subtraction ({} elements)",
+                self.data.len()
+            );
+            for x in &mut self.data {
+                *x -= rhs;
+            }
         }
 
         debug!("Scalar subtraction completed");
@@ -983,6 +1519,11 @@ impl Sub<f32> for Tensor {
 impl Mul<f32> for Tensor {
     type Output = Tensor;
 
+    /// Multiplies each element of the tensor by a scalar.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn mul(mut self, rhs: f32) -> Self::Output {
         trace_fn!("Tensor::mul_scalar");
         debug!(
@@ -991,8 +1532,27 @@ impl Mul<f32> for Tensor {
             rhs
         );
 
-        for x in &mut self.data {
-            *x *= rhs;
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel scalar multiplication ({} elements)",
+                self.data.len()
+            );
+            self.data.par_iter_mut().for_each(|x| {
+                *x *= rhs;
+            });
+        }
+
+        // Sequential implementation (used when parallel is disabled or for small tensors)
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!(
+                "Using sequential scalar multiplication ({} elements)",
+                self.data.len()
+            );
+            for x in &mut self.data {
+                *x *= rhs;
+            }
         }
 
         debug!("Scalar multiplication completed");
@@ -1016,9 +1576,21 @@ impl Div<f32> for Tensor {
             self.data = vec![f32::INFINITY; self.shape.len()];
             return self;
         }
-
-        for x in &mut self.data {
-            *x /= rhs;
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel scalar multiplication ({} elements)",
+                self.data.len()
+            );
+            self.data.par_iter_mut().for_each(|x| {
+                *x /= rhs;
+            });
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            for x in &mut self.data {
+                *x /= rhs;
+            }
         }
 
         debug!("Scalar division completed");
@@ -1026,8 +1598,12 @@ impl Div<f32> for Tensor {
     }
 }
 
-// Implement in-place operations
 impl AddAssign<f32> for Tensor {
+    /// Adds a scalar to each element of the tensor in-place.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn add_assign(&mut self, rhs: f32) {
         trace_fn!("Tensor::add_assign");
         debug!(
@@ -1036,8 +1612,27 @@ impl AddAssign<f32> for Tensor {
             self.shape()
         );
 
-        for x in &mut self.data {
-            *x += rhs;
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel in-place addition ({} elements)",
+                self.data.len()
+            );
+            self.data.par_iter_mut().for_each(|x| {
+                *x += rhs;
+            });
+        }
+
+        // Sequential implementation (used when parallel is disabled or for small tensors)
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!(
+                "Using sequential in-place addition ({} elements)",
+                self.data.len()
+            );
+            for x in &mut self.data {
+                *x += rhs;
+            }
         }
 
         debug!("In-place scalar addition completed");
@@ -1045,6 +1640,11 @@ impl AddAssign<f32> for Tensor {
 }
 
 impl SubAssign<f32> for Tensor {
+    /// Subtracts a scalar from each element of the tensor in-place.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn sub_assign(&mut self, rhs: f32) {
         trace_fn!("Tensor::sub_assign");
         debug!(
@@ -1053,8 +1653,27 @@ impl SubAssign<f32> for Tensor {
             self.shape()
         );
 
-        for x in &mut self.data {
-            *x -= rhs;
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel in-place subtraction ({} elements)",
+                self.data.len()
+            );
+            self.data.par_iter_mut().for_each(|x| {
+                *x -= rhs;
+            });
+        }
+
+        // Sequential implementation (used when parallel is disabled or for small tensors)
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!(
+                "Using sequential in-place subtraction ({} elements)",
+                self.data.len()
+            );
+            for x in &mut self.data {
+                *x -= rhs;
+            }
         }
 
         debug!("In-place scalar subtraction completed");
@@ -1062,6 +1681,11 @@ impl SubAssign<f32> for Tensor {
 }
 
 impl MulAssign<f32> for Tensor {
+    /// Multiplies each element of the tensor by a scalar in-place.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn mul_assign(&mut self, rhs: f32) {
         trace_fn!("Tensor::mul_assign");
         debug!(
@@ -1070,8 +1694,27 @@ impl MulAssign<f32> for Tensor {
             rhs
         );
 
-        for x in &mut self.data {
-            *x *= rhs;
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel in-place multiplication ({} elements)",
+                self.data.len()
+            );
+            self.data.par_iter_mut().for_each(|x| {
+                *x *= rhs;
+            });
+        }
+
+        // Sequential implementation (used when parallel is disabled or for small tensors)
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!(
+                "Using sequential in-place multiplication ({} elements)",
+                self.data.len()
+            );
+            for x in &mut self.data {
+                *x *= rhs;
+            }
         }
 
         debug!("In-place scalar multiplication completed");
@@ -1079,6 +1722,11 @@ impl MulAssign<f32> for Tensor {
 }
 
 impl DivAssign<f32> for Tensor {
+    /// Divides each element of the tensor by a scalar in-place.
+    ///
+    /// # Note
+    /// When the 'parallel' feature is enabled, operations on large tensors
+    /// will be parallelized for better performance.
     fn div_assign(&mut self, rhs: f32) {
         trace_fn!("Tensor::div_assign");
         debug!(
@@ -1088,15 +1736,29 @@ impl DivAssign<f32> for Tensor {
         );
 
         if rhs == 0.0 {
-            error!("Attempted in-place division by zero");
-            for x in &mut self.data {
-                *x = if *x == 0.0 {
-                    0.0
-                } else {
-                    x.signum() * f32::INFINITY
-                };
-            }
-        } else {
+            error!("Attempted in-place division by zero, returning infinity");
+            self.data = vec![f32::INFINITY; self.shape.len()];
+            return;
+        }
+
+        #[cfg(feature = "parallel")]
+        {
+            debug!(
+                "Using parallel in-place division by zero ({} elements)",
+                self.data.len()
+            );
+            self.data.par_iter_mut().for_each(|x| {
+                *x /= rhs;
+            });
+        }
+
+        // Sequential implementation for division by zero
+        #[cfg(not(feature = "parallel"))]
+        {
+            debug!(
+                "Using sequential in-place division by zero ({} elements)",
+                self.data.len()
+            );
             for x in &mut self.data {
                 *x /= rhs;
             }
@@ -1105,7 +1767,6 @@ impl DivAssign<f32> for Tensor {
         debug!("In-place scalar division completed");
     }
 }
-
 // Implement display for better debugging
 impl fmt::Debug for Tensor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1400,9 +2061,10 @@ mod tests {
         assert_eq!(a.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
 
         a *= 2.0;
-        assert_eq!(a.to_vec(), vec![2.0, 4.0, 6.0, 8.0]);
 
+        assert_eq!(a.to_vec(), vec![2.0, 4.0, 6.0, 8.0]);
         a /= 2.0;
+
         assert_eq!(a.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
 
         // Test in-place division by zero

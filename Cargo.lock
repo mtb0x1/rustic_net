@@ -467,7 +467,9 @@ version = "0.1.0"
 dependencies = [
  "approx",
  "criterion",
+ "lazy_static",
  "rand",
+ "rayon",
  "tracing",
  "tracing-subscriber",
 ]

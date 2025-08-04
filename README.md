@@ -26,18 +26,44 @@ cargo build
 ```
 
 ## 🧪 Features
+- **Parallel Processing**: Leverage multi-core CPUs for faster tensor operations
 - Experimental neural network implementations
 - Research-focused architecture
 - Cutting-edge (and sometimes unstable) features
 - Playground for AI/ML research
+
+## 🚀 Performance
+
+Rustic Net includes parallel implementations of key operations to maximize performance on multi-core systems:
+
+- Parallel tensor operations using Rayon for data parallelism
+- Automatic thread pool management
+- Optimized for both small and large tensors
+
+### Enabling Parallel Processing
+
+Parallel features are enabled by default. You can control the number of threads using the `RAYON_NUM_THREADS` environment variable:
+
+```bash
+# Use 4 threads for parallel operations
+RAYON_NUM_THREADS=4 cargo run --example tensor_operations
+
+# Use all available CPU cores
+RAYON_NUM_THREADS=0 cargo run --example tensor_operations
+```
 
 ## 📂 Project Structure
 ```
 rustic_net/
 ├── src/           # Core source code
 │   ├── dtype.rs   # Data types and operations
-│   └── tensor.rs  # Tensor operations
-├── prompts/       # Starter prompts and ideas
+│   ├── tensor/    # Tensor operations
+│   │   ├── mod.rs
+│   │   ├── ops/   # Parallel operations
+│   │   └── ...
+│   └── parallel/  # Parallel processing utilities
+├── examples/      # Example code
+├── benches/       # Benchmarks
 ├── tests/         # Tests
 └── Cargo.toml     # Project manifest
 ```

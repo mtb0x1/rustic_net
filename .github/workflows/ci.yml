@@ -35,12 +35,21 @@ jobs:
     
     - name: Build (release)
       run: cargo build --release --verbose
+
+    - name: Build (release+parallel)
+      run: cargo build --release --features parallel --verbose
     
     - name: Run tests (release)
       run: cargo test --release --verbose
+
+    - name: Run tests (release+parallel)
+      run: cargo test --release --features parallel --verbose
     
     - name: Check formatting
       run: cargo fmt -- --check
     
     - name: Run Clippy
       run: cargo clippy -- -D warnings
+
+    - name: Run Clippy (release+parallel)
+      run: cargo clippy --features parallel -- -D warnings 
