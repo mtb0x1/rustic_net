@@ -1,12 +1,20 @@
 [package]
 name = "rustic_net"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 authors = ["mtb0x1 <mtb0x10x1@gmail.com>"]
 license-file = "LICENSE"
 
+[features]
+default = []
+
 [dependencies]
+criterion = { version = "0.7.0", features = ["html_reports"]}
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+rand = "0.9.2"
+approx = "0.5.1"
 
-[dev-dependencies]
-
-[build-dependencies]
+[[bench]]
+name = "tensor_benchmarks"
+harness = false

@@ -1,0 +1,106 @@
+Design a high-performance, ergonomic, and extensible Tensor data model in Rust as the foundational abstraction for a new Machine Learning Accelerator (MLA) framework.
+
+## Core Requirements
+
+### 1. Compatibility
+- Align with PyTorch/TensorFlow/ONNX standards
+- Consistent shape and broadcasting semantics
+- Standard dtype handling
+- Memory layout conventions
+
+### 2. Backend Interoperability
+- Support multiple compute backends (CPU, CUDA, Metal, TPU, WebGPU)
+- Zero-copy memory movement
+- Unified interface for different hardware accelerators
+
+### 3. Performance
+- Optimized memory layout (row-major/column-major)
+- Cache-friendly access patterns
+- SIMD/GPU optimization support
+- Minimal allocation overhead
+- Efficient in-place operations
+
+### 4. Usability
+- Idiomatic Rust API
+- Clear ownership semantics
+- Intuitive method chaining
+- Comprehensive error handling
+- Good documentation
+
+### 5. Extensibility
+- Support for future features:
+  - Sparse tensors
+  - Quantized formats
+  - Autograd metadata
+  - Custom dtypes
+  - Distributed tensors
+
+### 6. constraints
+- Tensor data model need to be ffi compatible
+- DO NOT USE external crates for tensor data model
+- DO NOT USE external crates for tensor operations
+- DO NOT USE external crates for tensor backend
+- DO NOT USE external crates for tensor memory management
+- DO NOT USE external crates for tensor shape
+- DO NOT USE external crates for tensor dtype
+- DO NOT USE external crates for tensor autograd
+- DO NOT USE external crates for tensor distributed
+- DO NOT USE external crates for tensor optimizer
+
+## Implementation Components
+
+1. **Tensor Struct**
+   - Shape and stride information
+   - Memory buffer (simple for now, vec<f32> ?)
+   - Device placement
+
+2. **Backend design**
+   - Device management (from, to)
+   - Memory management (zero-copy when possible)
+
+3. **Data Movement**
+   - Zero-copy transfers
+   - Pinned memory support
+   - Async operations
+   - Cross-device communication (from, to)
+
+4. **Type System**
+   - only 32-bit floating point numbers
+ 
+
+5. **Shape System**
+   - should be simple enough for now
+
+## Example Usage
+```rust
+// Tensor creation
+let t1 = Tensor::from_vec(vec![1.0, 2.0, 3.0], [3], Device::CPU)?;
+let t1_vec = t1.to_vec()?;
+let t2 = Tensor::ones([1, 3], DType::F32, Device::Cuda(0))?;
+let t2_vec = t2.to_vec()?;
+let t3 = Tensor::from_vec(t1_vec, [3], Device::Cuda(0))?;
+let t4 = Tensor::from_vec(t2_vec, [1, 3], Device::Cuda(0))?;
+
+// Operations
+let t5 = t3.matmul(&t4.t())?;
+let t6 = t5.relu()? + 0.5;
+
+// Device movement
+let t6 = t6.to_device(Device::CPU)?;
+let data: Vec<f32> = t6.to_vec()?;
+```
+
+## Integration Plan
+1. Core tensor operations
+2. Backend
+3. Basic math operations
+4. Memory management
+
+## Tests
+1. Tensor creation, device placement
+2. Tensor operations
+3. Backend
+4. Memory management
+5. Device movement
+6. Data Movement
+
