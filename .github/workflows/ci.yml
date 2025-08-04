@@ -33,19 +33,19 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
     
-    - name: Build (release)
-      run: cargo build --release --verbose
-
     - name: Build (release+parallel)
       run: cargo build --release --features parallel --verbose
     
-    - name: Run tests (release)
-      run: cargo test --release --verbose
-
     # TODO: buggy on ci
     #- name: Run tests (release+parallel)
     #  run: cargo test --release --features parallel --verbose
     
+    - name: Build (release)
+      run: cargo build --release --verbose
+
+    - name: Run tests (release)
+      run: cargo test --release --verbose
+
     - name: Check formatting
       run: cargo fmt -- --check
     

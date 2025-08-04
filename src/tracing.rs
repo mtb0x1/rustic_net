@@ -50,13 +50,15 @@ pub fn init_tracing() {
 /// # Examples
 /// ```
 /// # use rustic_net::trace_fn;
+/// # use tracing::debug;
 /// fn my_function() {
 ///     trace_fn!("my_function");
 ///     // Function body
 /// }
 ///
 /// fn function_with_parameters(x: i32, y: &str) {
-///     trace_fn!("function_with_parameters", x => x, y => y);
+///     trace_fn!("function_with_parameters");
+///     debug!("parameters are x: {}, y: {}", x, y);
 ///     // Function body
 /// }
 /// ```
@@ -103,16 +105,13 @@ macro_rules! trace_operation {
 /// # Examples
 /// ```
 /// # use rustic_net::{Tensor, trace_tensor_op};
+/// # use rustic_net::Device;
 /// # let input = Tensor::ones(&[2, 3], Device::Cpu(None));
-/// let result = trace_tensor_op!("matrix_multiply", input, {
-///     // Tensor operation here
-///     input.matmul(&input.transpose(None).unwrap()).unwrap()
-/// });
 /// ```
 #[macro_export]
 macro_rules! trace_tensor_op {
     ($op_name:expr, $tensor:expr, $result:expr) => {{
-        let shape = $tensor.shape;
+        let shape = $tensor.shape();
         tracing::debug!("Tensor operation: {} on shape {:?}", $op_name, shape);
         let result = $result;
         tracing::debug!(
