@@ -573,21 +573,21 @@ impl CreationOps for CpuSimd {
         let data: Vec<f32> = (0..size).map(|i| start + i as f32).collect();
         Self::from_vec(data, &[size], device)
     }
-    
+
     fn zeros(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSimd::zeros");
         let size: usize = shape.iter().product();
         let data = vec![0.0; size];
         Self::from_vec(data, shape, device)
     }
-    
+
     fn ones(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSimd::ones");
         let size: usize = shape.iter().product();
         let data = vec![1.0; size];
         Self::from_vec(data, shape, device)
     }
-    
+
     fn identity(size: usize, device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSimd::identity");
         let mut data = vec![0.0; size * size];
@@ -596,11 +596,15 @@ impl CreationOps for CpuSimd {
         }
         Self::from_vec(data, &[size, size], device)
     }
-    
-    fn from_vec(data: Vec<f32>, shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+
+    fn from_vec(
+        data: Vec<f32>,
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
         trace_fn!("CpuSimd::from_vec");
         let shape_obj = crate::tensor::Shape::new(shape);
-        
+
         // Validate that the data length matches the shape
         if data.len() != shape_obj.len() {
             return Err(format!(
@@ -610,7 +614,7 @@ impl CreationOps for CpuSimd {
                 shape_obj.len()
             ));
         }
-        
+
         Ok(Tensor {
             data: std::sync::Arc::new(data),
             shape: shape_obj,

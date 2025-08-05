@@ -110,21 +110,29 @@ pub trait CreationOps {
 
     /// Creates a 1D tensor with values in the range [start, end).
     fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String>;
-    
+
     /// Creates a tensor filled with zeros.
     fn zeros(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String>;
-    
+
     /// Creates a tensor filled with ones.
     fn ones(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String>;
-    
+
     /// Creates an identity matrix (2D tensor with ones on the diagonal).
     fn identity(size: usize, device: crate::tensor::Device) -> Result<Tensor, String>;
-    
+
     /// Creates a tensor from a vector with the specified shape and device.
-    fn from_vec(data: Vec<f32>, shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String>;
-    
+    fn from_vec(
+        data: Vec<f32>,
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String>;
+
     /// Creates a tensor from a slice with the specified shape.
-    fn from_slice(slice: &[f32], shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+    fn from_slice(
+        slice: &[f32],
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
         Self::from_vec(slice.to_vec(), shape, device)
     }
 }

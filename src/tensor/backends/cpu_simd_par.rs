@@ -584,38 +584,42 @@ impl CreationOps for CpuSimdPar {
 
         Self::from_vec(data, &[size], device)
     }
-    
+
     fn zeros(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSimdPar::zeros");
         let size: usize = shape.iter().product();
         let data = vec![0.0; size];
         Self::from_vec(data, shape, device)
     }
-    
+
     fn ones(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSimdPar::ones");
         let size: usize = shape.iter().product();
         let data = vec![1.0; size];
         Self::from_vec(data, shape, device)
     }
-    
+
     fn identity(size: usize, device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSimdPar::identity");
         let len = size * size;
         let mut data = vec![0.0; len];
-        
+
         // Parallelize setting the diagonal elements
         data.par_chunks_mut(size).enumerate().for_each(|(i, row)| {
             row[i] = 1.0;
         });
-        
+
         Self::from_vec(data, &[size, size], device)
     }
-    
-    fn from_vec(data: Vec<f32>, shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+
+    fn from_vec(
+        data: Vec<f32>,
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
         trace_fn!("CpuSimdPar::from_vec");
         let shape_obj = crate::tensor::Shape::new(shape);
-        
+
         // Validate that the data length matches the shape
         if data.len() != shape_obj.len() {
             return Err(format!(
@@ -625,7 +629,7 @@ impl CreationOps for CpuSimdPar {
                 shape_obj.len()
             ));
         }
-        
+
         Ok(Tensor {
             data: std::sync::Arc::new(data),
             shape: shape_obj,

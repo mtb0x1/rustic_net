@@ -817,7 +817,11 @@ impl CreationOps for CpuParallel {
     /// # Performance
     /// - **Complexity**: O(n) where n is the number of elements
     /// - **Memory**: Allocates a new tensor
-    fn from_vec(data: Vec<f32>, shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+    fn from_vec(
+        data: Vec<f32>,
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::from_vec");
         let shape_obj = crate::tensor::Shape::new(shape);
 

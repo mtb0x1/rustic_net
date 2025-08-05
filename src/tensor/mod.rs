@@ -53,7 +53,7 @@ pub mod impl_ops;
 pub mod shape;
 
 use backends::{
-    traits::{BinaryElementwiseOps, MatOps, ReductionOps, UnaryOps, CreationOps},
+    traits::{BinaryElementwiseOps, CreationOps, MatOps, ReductionOps, UnaryOps},
     Cpu,
 };
 

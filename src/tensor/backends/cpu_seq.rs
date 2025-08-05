@@ -367,21 +367,21 @@ impl CreationOps for CpuSequential {
         let data: Vec<f32> = (0..size).map(|i| start + i as f32).collect();
         Self::from_vec(data, &[size], device)
     }
-    
+
     fn zeros(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::zeros");
         let size: usize = shape.iter().product();
         let data = vec![0.0; size];
         Self::from_vec(data, shape, device)
     }
-    
+
     fn ones(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::ones");
         let size: usize = shape.iter().product();
         let data = vec![1.0; size];
         Self::from_vec(data, shape, device)
     }
-    
+
     fn identity(size: usize, device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::identity");
         let mut data = vec![0.0; size * size];
@@ -390,11 +390,15 @@ impl CreationOps for CpuSequential {
         }
         Self::from_vec(data, &[size, size], device)
     }
-    
-    fn from_vec(data: Vec<f32>, shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+
+    fn from_vec(
+        data: Vec<f32>,
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::from_vec");
         let shape_obj = crate::tensor::Shape::new(shape);
-        
+
         // Validate that the data length matches the shape
         if data.len() != shape_obj.len() {
             return Err(format!(
@@ -404,7 +408,7 @@ impl CreationOps for CpuSequential {
                 shape_obj.len()
             ));
         }
-        
+
         Ok(Tensor {
             data: std::sync::Arc::new(data),
             shape: shape_obj,
