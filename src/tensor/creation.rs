@@ -90,7 +90,10 @@ pub fn zeros(shape: &[usize], device: Device) -> Tensor {
     trace_fn!("tensor::creation::zeros");
     let size: usize = shape.iter().product();
     let data = vec![0.0; size];
-    from_vec(data, shape, device).unwrap()
+    match from_vec(data, shape, device) {
+        Ok(tensor) => tensor,
+        Err(e) => panic!("Failed to create zeros tensor: {}", e),
+    }
 }
 
 /// Creates a tensor filled with ones.
@@ -110,7 +113,10 @@ pub fn ones(shape: &[usize], device: Device) -> Tensor {
     trace_fn!("tensor::creation::ones");
     let size: usize = shape.iter().product();
     let data = vec![1.0; size];
-    from_vec(data, shape, device).unwrap()
+    match from_vec(data, shape, device) {
+        Ok(tensor) => tensor,
+        Err(e) => panic!("Failed to create ones tensor: {}", e),
+    }
 }
 
 /// Creates an identity matrix (2D tensor with ones on the diagonal).
@@ -132,7 +138,10 @@ pub fn identity(size: usize, device: Device) -> Tensor {
     for i in 0..size {
         data[i * size + i] = 1.0;
     }
-    from_vec(data, &[size, size], device).unwrap()
+    match from_vec(data, &[size, size], device) {
+        Ok(tensor) => tensor,
+        Err(e) => panic!("Failed to create identity tensor: {}", e),
+    }
 }
 
 /// Creates a tensor with uniformly distributed random values in [0, 1).
@@ -152,7 +161,10 @@ pub fn identity(size: usize, device: Device) -> Tensor {
 /// ```
 pub fn random(shape: &[usize], device: Device) -> Tensor {
     trace_fn!("tensor::creation::random");
-    Cpu::random(shape, device).unwrap()
+    match Cpu::random(shape, device) {
+        Ok(tensor) => tensor,
+        Err(e) => panic!("Failed to create random tensor: {}", e),
+    }
 }
 
 /// Creates a 1D tensor with values in the range [start, end).
@@ -173,5 +185,8 @@ pub fn random(shape: &[usize], device: Device) -> Tensor {
 /// ```
 pub fn arange(start: f32, end: f32, device: Device) -> Tensor {
     trace_fn!("tensor::creation::arange");
-    Cpu::arange(start, end, device).unwrap()
+    match Cpu::arange(start, end, device) {
+        Ok(tensor) => tensor,
+        Err(e) => panic!("Failed to create arange tensor: {}", e),
+    }
 }

@@ -36,7 +36,7 @@ pub mod cpu_simd;
 #[cfg(feature = "parallel")]
 pub mod cpu_par;
 
-#[cfg(all(feature = "parallel", feature = "simd"))]
+#[cfg(all(feature = "simd_and_parallel"))]
 pub mod cpu_simd_par;
 
 #[cfg(all(
@@ -47,11 +47,11 @@ pub mod cpu_simd_par;
 ))]
 pub use cpu_seq::CpuSequential as Cpu;
 
-#[cfg(all(feature = "simd", not(feature = "parallel")))]
+#[cfg(feature = "simd")]
 pub use cpu_simd::CpuSimd as Cpu;
 
-#[cfg(all(feature = "parallel", not(feature = "simd")))]
+#[cfg(feature = "parallel")]
 pub use cpu_par::CpuParallel as Cpu;
 
-#[cfg(all(feature = "parallel", feature = "simd"))]
+#[cfg(all(feature = "simd_and_parallel"))]
 pub use cpu_simd_par::CpuSimdPar as Cpu;

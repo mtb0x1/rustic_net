@@ -300,6 +300,7 @@ fn reduce_axis<F>(
 where
     F: Fn(f32, f32) -> f32 + Send + Sync,
 {
+    trace_fn!("CpuSimdPar::reduce_axis");
     match axis {
         None => {
             let result = tensor.data.par_iter().cloned().reduce(|| init, reduce_op);
@@ -345,6 +346,7 @@ where
 
 impl ScalarOps for CpuSimdPar {
     fn add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::add_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -369,6 +371,7 @@ impl ScalarOps for CpuSimdPar {
     }
 
     fn sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::sub_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -393,6 +396,7 @@ impl ScalarOps for CpuSimdPar {
     }
 
     fn mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::mul_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -417,6 +421,7 @@ impl ScalarOps for CpuSimdPar {
     }
 
     fn div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::div_scalar");
         if scalar == 0.0 {
             return Err("Division by zero".to_string());
         }
@@ -444,6 +449,7 @@ impl ScalarOps for CpuSimdPar {
     }
 
     fn r_add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::r_add_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -468,6 +474,7 @@ impl ScalarOps for CpuSimdPar {
     }
 
     fn r_sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::r_sub_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -492,6 +499,7 @@ impl ScalarOps for CpuSimdPar {
     }
 
     fn r_mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::r_mul_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -516,6 +524,7 @@ impl ScalarOps for CpuSimdPar {
     }
 
     fn r_div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::r_div_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -542,6 +551,7 @@ impl ScalarOps for CpuSimdPar {
 
 impl CreationOps for CpuSimdPar {
     fn random(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::random");
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaCha8Rng;
         let size: usize = shape.iter().product();
@@ -556,6 +566,7 @@ impl CreationOps for CpuSimdPar {
     }
 
     fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::arange");
         let size = (end - start).abs() as usize;
         let data: Vec<f32> = (0..size)
             .into_par_iter()
@@ -570,6 +581,7 @@ fn arg_reduce_axis<F>(tensor: &Tensor, axis: Option<usize>, compare: F) -> Resul
 where
     F: Fn((usize, f32), (usize, f32)) -> bool + Send + Sync,
 {
+    trace_fn!("CpuSimdPar::arg_reduce_axis");
     match axis {
         None => {
             let (idx, _) = tensor.data.par_iter().cloned().enumerate().reduce(

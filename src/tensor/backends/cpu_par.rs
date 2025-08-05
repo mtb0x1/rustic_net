@@ -356,6 +356,7 @@ fn reduce_axis<F>(
 where
     F: Fn(f32, f32) -> f32 + Send + Sync,
 {
+    trace_fn!("CpuParallel::reduce_axis");
     match axis {
         None => {
             let result = tensor.data.par_iter().cloned().reduce(|| init, reduce_op);
@@ -401,6 +402,7 @@ where
 
 impl ScalarOps for CpuParallel {
     fn add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::add_scalar");
         let data: Vec<f32> = tensor.data.par_iter().map(|&x| x + scalar).collect();
         Ok(Tensor {
             data: Arc::new(data),
@@ -434,6 +436,7 @@ impl ScalarOps for CpuParallel {
     /// assert_eq!(result.to_vec(), vec![-4.0, -3.0, -2.0]);
     /// ```
     fn sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::sub_scalar");
         let data: Vec<f32> = tensor.data.par_iter().map(|&x| x - scalar).collect();
         Ok(Tensor {
             data: Arc::new(data),
@@ -467,6 +470,7 @@ impl ScalarOps for CpuParallel {
     /// assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0]);
     /// ```
     fn mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::mul_scalar");
         let data: Vec<f32> = tensor.data.par_iter().map(|&x| x * scalar).collect();
         Ok(Tensor {
             data: Arc::new(data),
@@ -503,6 +507,7 @@ impl ScalarOps for CpuParallel {
     /// assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0]);
     /// ```
     fn div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::div_scalar");
         if scalar == 0.0 {
             return Err("Division by zero".to_string());
         }
@@ -541,6 +546,7 @@ impl ScalarOps for CpuParallel {
     /// assert_eq!(result.to_vec(), vec![6.0, 7.0, 8.0]);
     /// ```
     fn r_add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::r_add_scalar");
         let data: Vec<f32> = tensor.data.par_iter().map(|&x| scalar + x).collect();
         Ok(Tensor {
             data: Arc::new(data),
@@ -576,6 +582,7 @@ impl ScalarOps for CpuParallel {
     /// assert_eq!(result.to_vec(), vec![4.0, 3.0, 2.0]);
     /// ```
     fn r_sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::r_sub_scalar");
         let data: Vec<f32> = tensor.data.par_iter().map(|&x| scalar - x).collect();
         Ok(Tensor {
             data: Arc::new(data),
@@ -611,6 +618,7 @@ impl ScalarOps for CpuParallel {
     /// assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0]);
     /// ```
     fn r_mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::r_mul_scalar");
         let data: Vec<f32> = tensor.data.par_iter().map(|&x| scalar * x).collect();
         Ok(Tensor {
             data: Arc::new(data),
@@ -621,6 +629,7 @@ impl ScalarOps for CpuParallel {
     }
 
     fn r_div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::r_div_scalar");
         let data: Vec<f32> = tensor
             .data
             .par_iter()
@@ -664,6 +673,7 @@ impl CreationOps for CpuParallel {
     /// assert!(t.data.iter().all(|&x| x >= 0.0 && x < 1.0));
     /// ```
     fn random(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::random");
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaCha8Rng;
         let size: usize = shape.iter().product();
@@ -706,6 +716,7 @@ impl CreationOps for CpuParallel {
     /// assert_eq!(t.to_vec(), vec![5.0, 4.0, 3.0]);
     /// ```
     fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::arange");
         let size = (end - start).abs() as usize;
         let data: Vec<f32> = (0..size)
             .into_par_iter()
@@ -745,6 +756,7 @@ fn arg_reduce_axis<F>(tensor: &Tensor, axis: Option<usize>, compare: F) -> Resul
 where
     F: Fn((usize, f32), (usize, f32)) -> bool + Send + Sync,
 {
+    trace_fn!("CpuParallel::arg_reduce_axis");
     match axis {
         None => {
             let (idx, _) = tensor.data.par_iter().cloned().enumerate().reduce(

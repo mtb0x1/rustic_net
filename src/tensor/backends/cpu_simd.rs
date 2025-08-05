@@ -126,6 +126,7 @@ impl ScalarOps for CpuSimd {
     /// assert_eq!(result.to_vec(), vec![6.0, 7.0, 8.0, 9.0]);
     /// ```
     fn add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::add_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -178,6 +179,7 @@ impl ScalarOps for CpuSimd {
     /// assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0, 8.0]);
     /// ```
     fn sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::sub_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -230,6 +232,7 @@ impl ScalarOps for CpuSimd {
     /// assert_eq!(result.to_vec(), vec![2.5, 5.0, 7.5, 10.0]);
     /// ```
     fn mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::mul_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -287,6 +290,7 @@ impl ScalarOps for CpuSimd {
     /// # Panics
     /// This function will return an error if the scalar is zero.
     fn div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::div_scalar");
         if scalar == 0.0 {
             return Err("Division by zero".to_string());
         }
@@ -348,6 +352,7 @@ impl ScalarOps for CpuSimd {
     /// (which is implemented by `add_scalar`). For addition, the result is the same, but for
     /// non-commutative operations like subtraction, the order matters.
     fn r_add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::r_add_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -405,6 +410,7 @@ impl ScalarOps for CpuSimd {
     /// This operation is equivalent to `scalar - tensor` and is different from `tensor - scalar`
     /// (which is implemented by `sub_scalar`). The order of operands is important for subtraction.
     fn r_sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::r_sub_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -462,6 +468,7 @@ impl ScalarOps for CpuSimd {
     /// Since multiplication is commutative, this operation is equivalent to `mul_scalar`.
     /// It's provided for API completeness and consistency with other reverse operations.
     fn r_mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::r_mul_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -524,6 +531,7 @@ impl ScalarOps for CpuSimd {
     /// This operation is equivalent to `scalar / tensor` and is different from `tensor / scalar`
     /// (which is implemented by `div_scalar`). The order of operands is important for division.
     fn r_div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::r_div_scalar");
         let mut data = tensor.data.to_vec();
         let len = data.len();
         let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
@@ -551,6 +559,7 @@ impl ScalarOps for CpuSimd {
 
 impl CreationOps for CpuSimd {
     fn random(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::random");
         use rand::Rng;
         let size: usize = shape.iter().product();
         let mut rng = rand::thread_rng();
@@ -559,6 +568,7 @@ impl CreationOps for CpuSimd {
     }
 
     fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::arange");
         let size = (end - start).abs() as usize;
         let data: Vec<f32> = (0..size).map(|i| start + i as f32).collect();
         Tensor::from_vec(data, &[size], device)
@@ -649,6 +659,7 @@ fn reduce_axis<F>(
 where
     F: Fn(f32, f32) -> f32,
 {
+    trace_fn!("CpuSimd::reduce_axis");
     match axis {
         None => {
             let result = tensor.data.iter().fold(init, |acc, &x| reduce_op(acc, x));
@@ -693,6 +704,7 @@ fn arg_reduce_axis<F>(tensor: &Tensor, axis: Option<usize>, compare: F) -> Resul
 where
     F: Fn((usize, f32), (usize, f32)) -> bool,
 {
+    trace_fn!("CpuSimd::arg_reduce_axis");
     match axis {
         None => {
             let (idx, _) = tensor
