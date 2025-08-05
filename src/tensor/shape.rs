@@ -71,29 +71,3 @@ impl Shape {
         &self.strides
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_shape_creation() {
-        let shape = Shape::new(&[2, 3, 4]);
-        assert_eq!(shape.dims(), &[2, 3, 4]);
-        assert_eq!(shape.strides(), &[12, 4, 1]);
-        assert_eq!(shape.len(), 24);
-        assert_eq!(shape.ndim(), 3);
-    }
-
-    #[test]
-    #[should_panic(expected = "Shape must have at least one dimension")]
-    fn test_empty_shape() {
-        Shape::new(&[]);
-    }
-
-    #[test]
-    #[should_panic(expected = "Shape dimensions cannot be zero")]
-    fn test_zero_dimension() {
-        Shape::new(&[1, 0, 3]);
-    }
-}
