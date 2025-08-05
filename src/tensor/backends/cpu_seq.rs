@@ -4,36 +4,12 @@
 //! that runs on the CPU without any parallelization.
 
 use super::traits::*;
-use super::{Device, DType, Shape, Tensor};
+use crate::tensor::Tensor;
 use crate::trace_fn;
-use rand::Rng;
 use std::sync::Arc;
-use tracing::debug;
 
 /// Sequential CPU backend
 pub struct CpuSequential;
-
-impl CreateTensor for CpuSequential {
-    fn create_tensor(data: Vec<f32>, shape: Shape, device: Device, dtype: DType) -> Tensor {
-        trace_fn!("CpuSequential::create_tensor");
-        debug!(
-            "Creating tensor with shape {:?}, device {:?}, dtype {:?}",
-            shape.dims(),
-            device,
-            dtype
-        );
-
-        // For now, we only support f32 tensors
-        assert_eq!(dtype, DType::F32);
-
-        Tensor {
-            data: Arc::new(data),
-            shape,
-            device,
-            dtype,
-        }
-    }
-}
 
 impl UnaryOps for CpuSequential {
     fn relu(tensor: &Tensor) -> Result<Tensor, String> {
@@ -129,7 +105,7 @@ impl BinaryElementwiseOps for CpuSequential {
             .zip(b.data.iter())
             .map(|(&a, &b)| {
                 if b == 0.0 {
-                    f32::INFINITY
+                    f32::NAN // Using NAN for division by zero is more standard than INFINITY
                 } else {
                     a / b
                 }
@@ -148,12 +124,10 @@ impl BinaryElementwiseOps for CpuSequential {
 impl MatOps for CpuSequential {
     fn matmul(a: &Tensor, b: &Tensor) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::matmul");
-        // Check if both tensors are 2D
-        if a.shape().len() != 2 || b.shape().len() != 2 {
+        if a.rank() != 2 || b.rank() != 2 {
             return Err("Matrix multiplication requires 2D tensors".to_string());
         }
 
-        // Check if the inner dimensions match
         if a.shape()[1] != b.shape()[0] {
             return Err("Inner dimensions must match for matrix multiplication".to_string());
         }
@@ -174,75 +148,24 @@ impl MatOps for CpuSequential {
             }
         }
 
-        Ok(Tensor {
-            data: Arc::new(result_data),
-            shape: Shape::new(&[m, n]),
-            device: a.device,
-            dtype: a.dtype,
-        })
+        Ok(Tensor::from_vec(result_data, &[m, n], a.device).unwrap())
     }
 }
 
 impl ReductionOps for CpuSequential {
     fn sum(tensor: &Tensor, axis: Option<usize>) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::sum");
-        match axis {
-            None => {
-                // Sum all elements
-                let sum = tensor.data.iter().sum();
-                Ok(Tensor::from_vec(vec![sum], &[1], tensor.device).unwrap())
-            }
-            Some(axis) => {
-                // Sum along the specified axis
-                if axis >= tensor.shape().len() {
-                    return Err(format!("Axis {} out of bounds for tensor of rank {}", 
-                                     axis, tensor.shape().len()));
-                }
-
-                // Calculate output shape (remove the dimension we're summing over)
-                let mut output_shape = tensor.shape().dims().to_vec();
-                output_shape.remove(axis);
-                if output_shape.is_empty() {
-                    output_shape.push(1); // Ensure at least 1D output
-                }
-
-                // Calculate the total number of elements in the result
-                let output_size: usize = output_shape.iter().product();
-                let mut result_data = vec![0.0; output_size];
-
-                // Calculate the number of elements to sum for each output element
-                let elements_per_sum = tensor.shape().dims()[axis];
-                let elements_before = tensor.shape().dims()[..axis].iter().product::<usize>();
-                let elements_after = tensor.shape().dims()[axis + 1..].iter().product::<usize>();
-
-                // Perform the sum
-                for i in 0..elements_before {
-                    for k in 0..elements_after {
-                        let mut sum = 0.0;
-                        for j in 0..elements_per_sum {
-                            let idx = (i * elements_per_sum + j) * elements_after + k;
-                            sum += tensor.data[idx];
-                        }
-                        let out_idx = i * elements_after + k;
-                        result_data[out_idx] = sum;
-                    }
-                }
-
-                Ok(Tensor::from_vec(result_data, &output_shape, tensor.device).unwrap())
-            }
-        }
+        reduce_axis(tensor, axis, |a, b| a + b, 0.0)
     }
 
     fn mean(tensor: &Tensor, axis: Option<usize>) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::mean");
         let sum = Self::sum(tensor, axis)?;
         let count = match axis {
-            None => tensor.data.len() as f32,
-            Some(axis) => tensor.shape().dims()[axis] as f32,
+            None => tensor.numel() as f32,
+            Some(axis) => tensor.shape()[axis] as f32,
         };
-
         let data = sum.data.iter().map(|&x| x / count).collect();
-        
         Ok(Tensor {
             data: Arc::new(data),
             shape: sum.shape,
@@ -253,22 +176,22 @@ impl ReductionOps for CpuSequential {
 
     fn max(tensor: &Tensor, axis: Option<usize>) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::max");
-        self::reduce_axis(tensor, axis, |a, b| a.max(*b), f32::NEG_INFINITY)
+        reduce_axis(tensor, axis, |a, b| a.max(b), f32::NEG_INFINITY)
     }
 
     fn min(tensor: &Tensor, axis: Option<usize>) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::min");
-        self::reduce_axis(tensor, axis, |a, b| a.min(*b), f32::INFINITY)
+        reduce_axis(tensor, axis, |a, b| a.min(b), f32::INFINITY)
     }
 
     fn argmax(tensor: &Tensor, axis: Option<usize>) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::argmax");
-        self::arg_reduce_axis(tensor, axis, |a, b| a.1 < b.1)
+        arg_reduce_axis(tensor, axis, |a, b| a.1 > b.1)
     }
 
     fn argmin(tensor: &Tensor, axis: Option<usize>) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::argmin");
-        self::arg_reduce_axis(tensor, axis, |a, b| a.1 > b.1)
+        arg_reduce_axis(tensor, axis, |a, b| a.1 < b.1)
     }
 }
 
@@ -280,52 +203,42 @@ fn reduce_axis<F>(
     init: f32,
 ) -> Result<Tensor, String>
 where
-    F: Fn(f32, &f32) -> f32,
+    F: Fn(f32, f32) -> f32,
 {
     match axis {
         None => {
-            // Global reduction
-            let result = tensor.data.iter().fold(init, |acc, x| reduce_op(acc, x));
+            let result = tensor.data.iter().fold(init, |acc, &x| reduce_op(acc, x));
             Ok(Tensor::from_vec(vec![result], &[1], tensor.device).unwrap())
         }
         Some(axis) => {
-            if axis >= tensor.shape().len() {
+            if axis >= tensor.rank() {
                 return Err(format!(
                     "Axis {} out of bounds for tensor of rank {}",
                     axis,
-                    tensor.shape().len()
+                    tensor.rank()
                 ));
             }
-
-            // Calculate output shape (remove the dimension we're reducing over)
-            let mut output_shape = tensor.shape().dims().to_vec();
+            let mut output_shape = tensor.shape().to_vec();
             output_shape.remove(axis);
             if output_shape.is_empty() {
-                output_shape.push(1); // Ensure at least 1D output
+                output_shape.push(1);
             }
-
-            // Calculate the total number of elements in the result
             let output_size: usize = output_shape.iter().product();
             let mut result_data = vec![init; output_size];
+            let inner_dim_size = tensor.shape()[axis];
+            let outer_dim_size: usize = tensor.shape()[..axis].iter().product();
+            let after_dim_size: usize = tensor.shape()[axis + 1..].iter().product();
 
-            // Calculate the number of elements to reduce for each output element
-            let elements_per_reduce = tensor.shape().dims()[axis];
-            let elements_before = tensor.shape().dims()[..axis].iter().product::<usize>();
-            let elements_after = tensor.shape().dims()[axis + 1..].iter().product::<usize>();
-
-            // Perform the reduction
-            for i in 0..elements_before {
-                for k in 0..elements_after {
+            for i in 0..outer_dim_size {
+                for k in 0..after_dim_size {
                     let mut acc = init;
-                    for j in 0..elements_per_reduce {
-                        let idx = (i * elements_per_reduce + j) * elements_after + k;
-                        acc = reduce_op(acc, &tensor.data[idx]);
+                    for j in 0..inner_dim_size {
+                        let idx = i * inner_dim_size * after_dim_size + j * after_dim_size + k;
+                        acc = reduce_op(acc, tensor.data[idx]);
                     }
-                    let out_idx = i * elements_after + k;
-                    result_data[out_idx] = acc;
+                    result_data[i * after_dim_size + k] = acc;
                 }
             }
-
             Ok(Tensor::from_vec(result_data, &output_shape, tensor.device).unwrap())
         }
     }
@@ -338,13 +251,12 @@ where
 {
     match axis {
         None => {
-            // Global reduction
             let (idx, _) = tensor
                 .data
                 .iter()
                 .enumerate()
                 .fold((0, f32::NAN), |acc, (i, &x)| {
-                    if i == 0 || compare(acc, (i, x)) {
+                    if acc.1.is_nan() || compare((i, x), acc) {
                         (i, x)
                     } else {
                         acc
@@ -353,51 +265,39 @@ where
             Ok(Tensor::from_vec(vec![idx as f32], &[1], tensor.device).unwrap())
         }
         Some(axis) => {
-            if axis >= tensor.shape().len() {
+            if axis >= tensor.rank() {
                 return Err(format!(
                     "Axis {} out of bounds for tensor of rank {}",
                     axis,
-                    tensor.shape().len()
+                    tensor.rank()
                 ));
             }
-
-            // Calculate output shape (remove the dimension we're reducing over)
-            let mut output_shape = tensor.shape().dims().to_vec();
+            let mut output_shape = tensor.shape().to_vec();
             output_shape.remove(axis);
             if output_shape.is_empty() {
-                output_shape.push(1); // Ensure at least 1D output
+                output_shape.push(1);
             }
-
-            // Calculate the total number of elements in the result
             let output_size: usize = output_shape.iter().product();
             let mut result_data = vec![0.0; output_size];
+            let inner_dim_size = tensor.shape()[axis];
+            let outer_dim_size: usize = tensor.shape()[..axis].iter().product();
+            let after_dim_size: usize = tensor.shape()[axis + 1..].iter().product();
 
-            // Calculate the number of elements to reduce for each output element
-            let elements_per_reduce = tensor.shape().dims()[axis];
-            let elements_before = tensor.shape().dims()[..axis].iter().product::<usize>();
-            let elements_after = tensor.shape().dims()[axis + 1..].iter().product::<usize>();
-
-            // Perform the reduction
-            for i in 0..elements_before {
-                for k in 0..elements_after {
+            for i in 0..outer_dim_size {
+                for k in 0..after_dim_size {
                     let mut best_idx = 0;
                     let mut best_val = f32::NAN;
-
-                    for j in 0..elements_per_reduce {
-                        let idx = (i * elements_per_reduce + j) * elements_after + k;
+                    for j in 0..inner_dim_size {
+                        let idx = i * inner_dim_size * after_dim_size + j * after_dim_size + k;
                         let val = tensor.data[idx];
-
-                        if j == 0 || compare((best_idx, best_val), (j, val)) {
+                        if best_val.is_nan() || compare((j, val), (best_idx, best_val)) {
                             best_idx = j;
                             best_val = val;
                         }
                     }
-
-                    let out_idx = i * elements_after + k;
-                    result_data[out_idx] = best_idx as f32;
+                    result_data[i * after_dim_size + k] = best_idx as f32;
                 }
             }
-
             Ok(Tensor::from_vec(result_data, &output_shape, tensor.device).unwrap())
         }
     }

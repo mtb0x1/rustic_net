@@ -7,17 +7,20 @@ license-file = "LICENSE"
 
 [features]
 default = []
-parallel = ["dep:rayon", "dep:lazy_static"]
+parallel = ["dep:rayon", "dep:rand_chacha", "dep:lazy_static"]
 
 [dependencies]
 criterion = { version = "0.7.0", features = ["html_reports"]}
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-rand = "0.9.2"
+rand = "0.8" # Pinned to 0.8 to match rand_chacha
 approx = "0.5.1"
+
 # Parallel processing
 rayon = { version = "1.8", optional = true }
+rand_chacha = { version = "0.3", optional = true }
 lazy_static = { version = "1.5.0", optional = true }
+
 
 [[bench]]
 name = "tensor_benchmarks"

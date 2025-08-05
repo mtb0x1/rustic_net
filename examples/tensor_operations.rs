@@ -55,7 +55,7 @@ fn main() {
     );
 
     // Create a range tensor
-    let range = Tensor::arange(0.0, 5.0);
+    let range = Tensor::arange(0.0, 5.0, device.clone());
     println!("\nRange tensor: {:?}", range.to_vec());
 
     println!("\n=== Shape Operations ===");
@@ -69,7 +69,7 @@ fn main() {
     );
 
     // Transpose a tensor
-    let c = a.transpose(None).unwrap();
+    let c = a.transpose().unwrap();
     println!(
         "\nTransposed tensor: shape {:?}, data: {:?}",
         c.shape(),
@@ -81,7 +81,7 @@ fn main() {
     println!("\nExpanded dimensions: shape {:?}", d.shape());
 
     // Squeeze dimensions
-    let e = d.squeeze(Some(0));
+    let e = d.squeeze(Some(0)).unwrap();
     println!("Squeezed dimensions: shape {:?}", e.shape());
 
     println!("\n=== Reduction Operations ===");
@@ -126,16 +126,16 @@ fn main() {
     println!("Multiply by scalar: {:?}", g.to_vec());
 
     // Element-wise operations between tensors
-    let h = a.add_tensor(&ones).unwrap();
+    let h = a.add(&ones).unwrap();
     println!("\nAdd tensors: {:?}", h.to_vec());
 
-    let i = a.mul_tensor(&a).unwrap();
+    let i = a.mul(&a).unwrap();
     println!("Multiply tensors: {:?}", i.to_vec());
 
     println!("\n=== Matrix Multiplication ===");
 
     // Matrix multiplication
-    let j = a.matmul(&a.transpose(None).unwrap()).unwrap();
+    let j = a.matmul(&a.transpose().unwrap()).unwrap();
     println!(
         "\nMatrix multiplication result: shape {:?}, data: {:?}",
         j.shape(),
@@ -145,7 +145,7 @@ fn main() {
     // Dot product of two vectors
     let k = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], device.clone()).unwrap();
     let l = Tensor::from_vec(vec![4.0, 5.0, 6.0], &[3], device).unwrap();
-    let dot = k.matmul(&l).unwrap();
+    let dot = k.matmul(&l.reshape(&[3, 1]).unwrap()).unwrap();
     println!("\nDot product of [1,2,3] and [4,5,6]: {}", dot.to_vec()[0]);
 
     println!("\n=== ReLU Activation ===");
@@ -187,7 +187,7 @@ fn main() {
         .unwrap();
 
         let start = Instant::now();
-        let _result = square_tensor.matmul(&square_tensor.transpose(None).unwrap());
+        let _result = square_tensor.matmul(&square_tensor.transpose().unwrap());
         let duration = start.elapsed();
         println!(
             "Parallel matrix multiplication ({}x{}): {:?}",

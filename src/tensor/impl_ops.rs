@@ -2,26 +2,25 @@
 //!
 //! This module contains implementations of basic arithmetic operations between tensors and scalars.
 
-use super::{Device, DType, Shape, Tensor};
-use tracing::debug;
+use super::Tensor;
 use std::ops::{Add, Div, Mul, Sub};
 use std::sync::Arc;
+use tracing::debug;
 
 // Helper macro to implement scalar operations
 macro_rules! impl_scalar_op {
     ($trait:ident, $method:ident, $op:tt) => {
         impl $trait<f32> for Tensor {
             type Output = Tensor;
-            
+
             fn $method(self, rhs: f32) -> Self::Output {
                 debug!("tensor::impl_ops::{}_scalar", stringify!($method));
-                
+
                 // For scalar operations, we can use the parallel version if available
                 #[cfg(feature = "parallel")]
                 {
-                    use crate::parallel::init_thread_pool;
                     use rayon::prelude::*;
-                    
+
                     let data = self.data.par_iter().map(|&x| x $op rhs).collect();
                     Tensor {
                         data: Arc::new(data),
@@ -30,7 +29,7 @@ macro_rules! impl_scalar_op {
                         dtype: self.dtype,
                     }
                 }
-                
+
                 #[cfg(not(feature = "parallel"))]
                 {
                     let data = self.data.iter().map(|&x| x $op rhs).collect();
@@ -43,10 +42,10 @@ macro_rules! impl_scalar_op {
                 }
             }
         }
-        
+
         impl $trait<f32> for &Tensor {
             type Output = Tensor;
-            
+
             fn $method(self, rhs: f32) -> Self::Output {
                 self.clone().$method(rhs)
             }
@@ -66,15 +65,15 @@ macro_rules! impl_reverse_scalar_op {
     ($trait:ident, $method:ident, $op:tt) => {
         impl $trait<&Tensor> for f32 {
             type Output = Tensor;
-            
+
             fn $method(self, rhs: &Tensor) -> Self::Output {
                 debug!("tensor::impl_ops::reverse_{}_scalar", stringify!($method));
-                
+
                 // For scalar operations, we can use the parallel version if available
                 #[cfg(feature = "parallel")]
                 {
                     use rayon::prelude::*;
-                    
+
                     let data = rhs.data.par_iter().map(|&x| self $op x).collect();
                     Tensor {
                         data: Arc::new(data),
@@ -83,7 +82,7 @@ macro_rules! impl_reverse_scalar_op {
                         dtype: rhs.dtype,
                     }
                 }
-                
+
                 #[cfg(not(feature = "parallel"))]
                 {
                     let data = rhs.data.iter().map(|&x| self $op x).collect();
@@ -96,10 +95,10 @@ macro_rules! impl_reverse_scalar_op {
                 }
             }
         }
-        
+
         impl $trait<Tensor> for f32 {
             type Output = Tensor;
-            
+
             fn $method(self, rhs: Tensor) -> Self::Output {
                 self.$method(&rhs)
             }
@@ -143,7 +142,7 @@ impl std::ops::DivAssign<f32> for Tensor {
 
 impl std::ops::Neg for Tensor {
     type Output = Tensor;
-    
+
     fn neg(self) -> Self::Output {
         self * -1.0
     }
@@ -151,7 +150,7 @@ impl std::ops::Neg for Tensor {
 
 impl std::ops::Neg for &Tensor {
     type Output = Tensor;
-    
+
     fn neg(self) -> Self::Output {
         self.clone().neg()
     }

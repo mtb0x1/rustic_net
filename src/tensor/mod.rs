@@ -1,23 +1,25 @@
 //! # Tensor Module
-//! 
+//!
 //! This module provides the core tensor type and operations for the Rustic Net library.
 
 use crate::trace_fn;
 use std::fmt;
 use std::sync::Arc;
-use std::ops::{Add, Sub, Mul, Div};
 
 pub mod backends;
 pub mod creation;
-pub mod shape;
 pub mod impl_ops;
-pub mod shape_ops;
+pub mod shape;
 
-use backends::*;
+use backends::traits::{BinaryElementwiseOps, MatOps, ReductionOps, UnaryOps};
 pub use creation::*;
 pub use shape::Shape;
-pub use shape_ops::*;
 pub use tracing::debug;
+
+#[cfg(feature = "parallel")]
+use backends::cpu_par::CpuParallel;
+#[cfg(not(feature = "parallel"))]
+use backends::cpu_seq::CpuSequential;
 
 #[cfg(feature = "parallel")]
 pub use crate::parallel;
@@ -85,22 +87,27 @@ impl TryFrom<DType> for &str {
 }
 
 /// Represents a multi-dimensional array (tensor)
+#[derive(Clone)]
 pub struct Tensor {
     /// The underlying data buffer
-    data: Arc<Vec<f32>>,
+    pub(crate) data: Arc<Vec<f32>>,
     /// The shape of the tensor
-    shape: Shape,
+    pub(crate) shape: Shape,
     /// The device where the tensor data is stored
-    device: Device,
+    pub(crate) device: Device,
     /// The data type of tensor elements
-    dtype: DType,
+    pub(crate) dtype: DType,
 }
 
 impl Tensor {
     // ===== Creation Methods =====
 
     /// Creates a new tensor from a vector with the given shape and device
-    pub fn from_vec<T: Into<Vec<f32>>>(data: T, shape: &[usize], device: Device) -> Result<Self, String> {
+    pub fn from_vec<T: Into<Vec<f32>>>(
+        data: T,
+        shape: &[usize],
+        device: Device,
+    ) -> Result<Self, String> {
         from_vec(data, shape, device)
     }
 
@@ -151,270 +158,194 @@ impl Tensor {
         self.dtype
     }
 
+    /// Returns the number of dimensions of the tensor
+    pub fn rank(&self) -> usize {
+        self.shape.ndim()
+    }
+
+    /// Returns the total number of elements in the tensor
+    pub fn numel(&self) -> usize {
+        self.shape.len()
+    }
+
     /// Converts the tensor to a vector
     pub fn to_vec(&self) -> Vec<f32> {
         self.data.as_ref().clone()
     }
 
-    // ===== Operations =====
+    // ===== Computation Operations =====
 
     /// Applies the ReLU activation function element-wise
     pub fn relu(&self) -> Result<Self, String> {
         trace_fn!("Tensor::relu");
-        match self.device {
-            Device::Cpu(_) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::relu(self)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::relu(self)
-                }
-            }
-            _ => Err(format!("Device not yet supported: {:?}", self.device)),
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::relu(self)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::relu(self)
         }
     }
 
     /// Element-wise addition with another tensor
-    pub fn add_tensor(&self, other: &Self) -> Result<Self, String> {
-        trace_fn!("Tensor::add_tensor");
-        match (self.device, other.device) {
-            (Device::Cpu(_), Device::Cpu(_)) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::add(self, other)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::add(self, other)
-                }
-            }
-            _ => Err(format!(
-                "Operation between tensors on different devices not supported: {:?} vs {:?}",
-                self.device, other.device
-            )),
+    pub fn add(&self, other: &Self) -> Result<Self, String> {
+        trace_fn!("Tensor::add");
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::add(self, other)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::add(self, other)
         }
     }
 
     /// Element-wise subtraction with another tensor
-    pub fn sub_tensor(&self, other: &Self) -> Result<Self, String> {
-        trace_fn!("Tensor::sub_tensor");
-        match (self.device, other.device) {
-            (Device::Cpu(_), Device::Cpu(_)) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::sub(self, other)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::sub(self, other)
-                }
-            }
-            _ => Err(format!(
-                "Operation between tensors on different devices not supported: {:?} vs {:?}",
-                self.device, other.device
-            )),
+    pub fn sub(&self, other: &Self) -> Result<Self, String> {
+        trace_fn!("Tensor::sub");
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::sub(self, other)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::sub(self, other)
         }
     }
 
     /// Element-wise multiplication with another tensor
-    pub fn mul_tensor(&self, other: &Self) -> Result<Self, String> {
-        trace_fn!("Tensor::mul_tensor");
-        match (self.device, other.device) {
-            (Device::Cpu(_), Device::Cpu(_)) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::mul(self, other)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::mul(self, other)
-                }
-            }
-            _ => Err(format!(
-                "Operation between tensors on different devices not supported: {:?} vs {:?}",
-                self.device, other.device
-            )),
+    pub fn mul(&self, other: &Self) -> Result<Self, String> {
+        trace_fn!("Tensor::mul");
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::mul(self, other)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::mul(self, other)
         }
     }
 
     /// Element-wise division by another tensor
-    pub fn div_tensor(&self, other: &Self) -> Result<Self, String> {
-        trace_fn!("Tensor::div_tensor");
-        match (self.device, other.device) {
-            (Device::Cpu(_), Device::Cpu(_)) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::div(self, other)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::div(self, other)
-                }
-            }
-            _ => Err(format!(
-                "Operation between tensors on different devices not supported: {:?} vs {:?}",
-                self.device, other.device
-            )),
+    pub fn div(&self, other: &Self) -> Result<Self, String> {
+        trace_fn!("Tensor::div");
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::div(self, other)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::div(self, other)
         }
     }
 
     /// Matrix multiplication with another tensor
     pub fn matmul(&self, other: &Self) -> Result<Self, String> {
         trace_fn!("Tensor::matmul");
-        match (self.device, other.device) {
-            (Device::Cpu(_), Device::Cpu(_)) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::matmul(self, other)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::matmul(self, other)
-                }
-            }
-            _ => Err(format!(
-                "Operation between tensors on different devices not supported: {:?} vs {:?}",
-                self.device, other.device
-            )),
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::matmul(self, other)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::matmul(self, other)
         }
     }
 
     // ===== Reduction Operations =====
 
     /// Computes the sum of tensor elements along the specified axis
-    /// If axis is None, sums all elements
     pub fn sum(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::sum");
-        match self.device {
-            Device::Cpu(_) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::sum(self, axis)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::sum(self, axis)
-                }
-            }
-            _ => Err(format!("Device not yet supported: {:?}", self.device)),
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::sum(self, axis)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::sum(self, axis)
         }
     }
 
     /// Computes the mean of tensor elements along the specified axis
-    /// If axis is None, computes mean of all elements
     pub fn mean(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::mean");
-        match self.device {
-            Device::Cpu(_) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::mean(self, axis)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::mean(self, axis)
-                }
-            }
-            _ => Err(format!("Device not yet supported: {:?}", self.device)),
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::mean(self, axis)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::mean(self, axis)
         }
     }
 
     /// Finds the maximum value along the specified axis
-    /// If axis is None, finds the global maximum
     pub fn max(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::max");
-        match self.device {
-            Device::Cpu(_) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::max(self, axis)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::max(self, axis)
-                }
-            }
-            _ => Err(format!("Device not yet supported: {:?}", self.device)),
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::max(self, axis)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::max(self, axis)
         }
     }
 
     /// Finds the minimum value along the specified axis
-    /// If axis is None, finds the global minimum
     pub fn min(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::min");
-        match self.device {
-            Device::Cpu(_) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::min(self, axis)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::min(self, axis)
-                }
-            }
-            _ => Err(format!("Device not yet supported: {:?}", self.device)),
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::min(self, axis)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::min(self, axis)
         }
     }
 
     /// Finds the index of the maximum value along the specified axis
-    /// If axis is None, finds the index of the global maximum
     pub fn argmax(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::argmax");
-        match self.device {
-            Device::Cpu(_) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::argmax(self, axis)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::argmax(self, axis)
-                }
-            }
-            _ => Err(format!("Device not yet supported: {:?}", self.device)),
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::argmax(self, axis)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::argmax(self, axis)
         }
     }
 
     /// Finds the index of the minimum value along the specified axis
-    /// If axis is None, finds the index of the global minimum
     pub fn argmin(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::argmin");
-        match self.device {
-            Device::Cpu(_) => {
-                #[cfg(feature = "parallel")]
-                {
-                    backends::cpu_par::CpuParallel::argmin(self, axis)
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    backends::cpu_seq::CpuSequential::argmin(self, axis)
-                }
-            }
-            _ => Err(format!("Device not yet supported: {:?}", self.device)),
+        #[cfg(feature = "parallel")]
+        {
+            CpuParallel::argmin(self, axis)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            CpuSequential::argmin(self, axis)
         }
     }
 
     // ===== Shape Manipulation =====
 
-    /// Reshapes the tensor to the given shape
+    /// Reshapes the tensor to the given shape without changing the data.
     pub fn reshape(&self, new_shape: &[usize]) -> Result<Self, String> {
         trace_fn!("Tensor::reshape");
-        // Calculate the total number of elements in the new shape
-        let new_size: usize = new_shape.iter().product();
-        
-        // Ensure the new shape has the same number of elements as the original
-        if new_size != self.data.len() {
+        if self.numel() != new_shape.iter().product::<usize>() {
             return Err(format!(
                 "Cannot reshape tensor of size {} to shape {:?}",
-                self.data.len(),
+                self.numel(),
                 new_shape
             ));
         }
 
-        // Create a new tensor with the same data but new shape
         Ok(Tensor {
             data: self.data.clone(),
             shape: Shape::new(new_shape),
@@ -423,65 +354,101 @@ impl Tensor {
         })
     }
 
-    /// Transposes the tensor according to the given axes
-    /// If axes is None, reverses the dimensions
-    pub fn transpose(&self, axes: Option<&[usize]>) -> Result<Self, String> {
+    /// Transposes the tensor by reversing its dimensions.
+    /// To transpose by a specific permutation of axes, use `transpose_axes`.
+    pub fn transpose(&self) -> Result<Self, String> {
         trace_fn!("Tensor::transpose");
-        let ndim = self.shape().len();
-        
-        // Determine the new axes order
-        let axes = match axes {
-            Some(axes) => {
-                if axes.len() != ndim {
-                    return Err(format!(
-                        "Axes length {} does not match tensor rank {}",
-                        axes.len(),
-                        ndim
-                    ));
-                }
-                axes.to_vec()
-            }
-            None => (0..ndim).rev().collect::<Vec<_>>(),
-        };
+        let axes: Vec<usize> = (0..self.rank()).rev().collect();
+        self.transpose_axes(&axes)
+    }
 
-        // Calculate the new shape and strides
-        let new_dims: Vec<usize> = axes.iter().map(|&i| self.shape()[i]).collect();
-        let new_strides: Vec<usize> = axes.iter().map(|&i| self.shape.strides()[i]).collect();
-        
-        // Create a new tensor with the transposed shape
-        let mut result = Tensor {
-            data: Arc::new(vec![0.0; self.data.len()]),
-            shape: Shape {
-                dims: new_dims,
-                strides: new_strides,
-                size: self.data.len(),
-            },
-            device: self.device,
-            dtype: self.dtype,
-        };
-
-        // Perform the transposition
-        let result_data = Arc::make_mut(&mut result.data);
-        
-        // For each element in the original tensor, calculate its new position
-        for (i, &val) in self.data.iter().enumerate() {
-            let mut new_idx = 0;
-            let mut remaining = i;
-            
-            // Calculate the new index using the original strides and new axes order
-            for (&dim, &stride) in self.shape.dims().iter().zip(self.shape.strides().iter()) {
-                let pos = remaining / stride;
-                remaining %= stride;
-                
-                // Find the position of this dimension in the new axes order
-                let new_axis = axes.iter().position(|&x| x == 0).unwrap();
-                new_idx += pos * result.shape.strides()[new_axis];
-            }
-            
-            result_data[new_idx] = val;
+    /// Transposes the tensor according to the given axes permutation.
+    pub fn transpose_axes(&self, axes: &[usize]) -> Result<Self, String> {
+        trace_fn!("Tensor::transpose_axes");
+        let rank = self.rank();
+        if axes.len() != rank {
+            return Err(format!(
+                "Axes length {} does not match tensor rank {}",
+                axes.len(),
+                rank
+            ));
         }
 
-        Ok(result)
+        let new_dims: Vec<usize> = axes.iter().map(|&i| self.shape()[i]).collect();
+        let new_shape = Shape::new(&new_dims);
+        let mut new_data = vec![0.0; self.numel()];
+
+        let old_strides = self.shape.strides();
+        let new_strides = new_shape.strides();
+
+        for (i, &val) in self.data.iter().enumerate() {
+            let mut old_indices = vec![0; rank];
+            let mut temp_index = i;
+            for (j, &stride) in old_strides.iter().enumerate() {
+                old_indices[j] = temp_index / stride;
+                temp_index %= stride;
+            }
+
+            let mut new_indices = vec![0; rank];
+            for (j, &axis) in axes.iter().enumerate() {
+                new_indices[j] = old_indices[axis];
+            }
+
+            let mut new_i = 0;
+            for (j, &index) in new_indices.iter().enumerate() {
+                new_i += index * new_strides[j];
+            }
+            new_data[new_i] = val;
+        }
+
+        Ok(Tensor {
+            data: Arc::new(new_data),
+            shape: new_shape,
+            device: self.device,
+            dtype: self.dtype,
+        })
+    }
+
+    /// Adds a new dimension of size 1 at the specified axis.
+    pub fn expand_dims(&self, axis: usize) -> Result<Self, String> {
+        trace_fn!("Tensor::expand_dims");
+        if axis > self.rank() {
+            return Err(format!(
+                "Axis {} is out of bounds for tensor of rank {}",
+                axis,
+                self.rank()
+            ));
+        }
+        let mut new_dims = self.shape().to_vec();
+        new_dims.insert(axis, 1);
+        self.reshape(&new_dims)
+    }
+
+    /// Removes dimensions of size 1. If `axis` is specified, it only removes that dimension.
+    pub fn squeeze(&self, axis: Option<usize>) -> Result<Self, String> {
+        trace_fn!("Tensor::squeeze");
+        let mut new_dims = self.shape().to_vec();
+        match axis {
+            Some(axis) => {
+                if axis >= self.rank() {
+                    return Err(format!(
+                        "Axis {} is out of bounds for tensor of rank {}",
+                        axis,
+                        self.rank()
+                    ));
+                }
+                if new_dims[axis] == 1 {
+                    new_dims.remove(axis);
+                }
+            }
+            None => {
+                new_dims.retain(|&dim| dim != 1);
+            }
+        }
+        if new_dims.is_empty() {
+            new_dims.push(1);
+        }
+        self.reshape(&new_dims)
     }
 
     // ===== Device Management =====
@@ -492,7 +459,7 @@ impl Tensor {
         if self.device == device {
             return Ok(self.clone());
         }
-        
+
         // For now, we only support CPU tensors
         // In the future, this will handle transferring data between devices
         match device {
@@ -510,20 +477,6 @@ impl Tensor {
     }
 }
 
-// Implementation of Tensor methods will be added in subsequent steps
-
-// Implement Clone for Tensor
-impl Clone for Tensor {
-    fn clone(&self) -> Self {
-        Tensor {
-            data: self.data.clone(),
-            shape: self.shape.clone(),
-            device: self.device,
-            dtype: self.dtype,
-        }
-    }
-}
-
 // Implement display for better debugging
 impl fmt::Debug for Tensor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -536,143 +489,117 @@ impl fmt::Debug for Tensor {
     }
 }
 
-// Implement basic arithmetic operations with scalar values
-impl Add<f32> for Tensor {
-    type Output = Tensor;
-
-    fn add(mut self, rhs: f32) -> Self::Output {
-        trace_fn!("Tensor::add_scalar");
-        let data = self.data.par_iter().map(|&x| x + rhs).collect();
-        
-        Tensor {
-            data: Arc::new(data),
-            shape: self.shape,
-            device: self.device,
-            dtype: self.dtype,
-        }
-    }
-}
-
-impl Sub<f32> for Tensor {
-    type Output = Tensor;
-
-    fn sub(mut self, rhs: f32) -> Self::Output {
-        trace_fn!("Tensor::sub_scalar");
-        let data = self.data.par_iter().map(|&x| x - rhs).collect();
-        
-        Tensor {
-            data: Arc::new(data),
-            shape: self.shape,
-            device: self.device,
-            dtype: self.dtype,
-        }
-    }
-}
-
-impl Mul<f32> for Tensor {
-    type Output = Tensor;
-
-    fn mul(mut self, rhs: f32) -> Self::Output {
-        trace_fn!("Tensor::mul_scalar");
-        let data = self.data.par_iter().map(|&x| x * rhs).collect();
-        
-        Tensor {
-            data: Arc::new(data),
-            shape: self.shape,
-            device: self.device,
-            dtype: self.dtype,
-        }
-    }
-}
-
-impl Div<f32> for Tensor {
-    type Output = Tensor;
-
-    fn div(mut self, rhs: f32) -> Self::Output {
-        trace_fn!("Tensor::div_scalar");
-        if rhs == 0.0 {
-            panic!("Division by zero");
-        }
-        
-        let data = self.data.par_iter().map(|&x| x / rhs).collect();
-        
-        Tensor {
-            data: Arc::new(data),
-            shape: self.shape,
-            device: self.device,
-            dtype: self.dtype,
-        }
-    }
-}
-
 // Import the tests module
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::tracing::init_tracing;
+    use std::sync::Once;
+
+    static TRACING_INIT: Once = Once::new();
+
+    fn setup() {
+        TRACING_INIT.call_once(|| {
+            init_tracing();
+        });
+    }
 
     #[test]
     fn test_device_default() {
-        let _ = init_tracing();
+        setup();
         let device = Device::default();
         assert_eq!(device, Device::Cpu(Some(0)));
     }
 
     #[test]
     fn test_dtype_conversion() {
-        let _ = init_tracing();
+        setup();
         let dtype: DType = "f32".try_into().unwrap();
         assert_eq!(dtype, DType::F32);
-        
+
         let dtype_str: &str = DType::F32.try_into().unwrap();
         assert_eq!(dtype_str, "f32");
-        
+
         assert_eq!(DType::F32.size_of(), 4);
     }
-    
+
     #[test]
     fn test_tensor_creation() {
-        let _ = init_tracing();
+        setup();
         let t = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default()).unwrap();
         assert_eq!(t.shape(), &[3]);
         assert_eq!(t.to_vec(), vec![1.0, 2.0, 3.0]);
     }
-    
+
     #[test]
     fn test_tensor_operations() {
-        let _ = init_tracing();
+        setup();
         let a = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default()).unwrap();
         let b = Tensor::from_vec(vec![4.0, 5.0, 6.0], &[3], Device::default()).unwrap();
-        
+
         // Test element-wise addition
-        let c = a.add_tensor(&b).unwrap();
+        let c = a.add(&b).unwrap();
         assert_eq!(c.to_vec(), vec![5.0, 7.0, 9.0]);
-        
-        // Test scalar operations
-        let d = c + 1.0;
-        assert_eq!(d.to_vec(), vec![6.0, 8.0, 10.0]);
-        
+
         // Test reduction
-        let e = d.sum(None).unwrap();
-        assert_eq!(e.to_vec(), vec![24.0]);
+        let e = c.sum(None).unwrap();
+        assert_eq!(e.to_vec(), vec![21.0]);
     }
-    
+
     #[test]
     fn test_reshape() {
-        let _ = init_tracing();
+        setup();
         let t = Tensor::arange(0.0, 6.0, Device::default());
         let t = t.reshape(&[2, 3]).unwrap();
         assert_eq!(t.shape(), &[2, 3]);
         assert_eq!(t.to_vec(), vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
     }
-    
+
     #[test]
     fn test_transpose() {
-        let _ = init_tracing();
+        setup();
+        let t = Tensor::from_vec(
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            &[2, 3],
+            Device::default(),
+        )
+        .unwrap();
+        let t_t = t.transpose().unwrap();
+        assert_eq!(t_t.shape(), &[3, 2]);
+        assert_eq!(t_t.to_vec(), vec![0.0, 3.0, 1.0, 4.0, 2.0, 5.0]);
+    }
+
+    #[test]
+    fn test_transpose_axes() {
+        setup();
+        let t = Tensor::from_vec(
+            (0..24).map(|x| x as f32).collect::<Vec<f32>>(),
+            &[2, 3, 4],
+            Device::default(),
+        )
+        .unwrap();
+        let t_t = t.transpose_axes(&[1, 2, 0]).unwrap();
+        assert_eq!(t_t.shape(), &[3, 4, 2]);
+        // Manually check a few values
+        // Original (0,0,0) -> 0. Transposed (0,0,0) -> 0
+        // Original (0,1,2) -> 6. Transposed (1,2,0) -> 6
+        // Original (1,2,3) -> 23. Transposed (2,3,1) -> 23
+        assert_eq!(t_t.to_vec()[0], 0.0);
+        assert_eq!(t_t.to_vec()[12], 6.0);
+        assert_eq!(t_t.to_vec()[23], 23.0);
+    }
+
+    #[test]
+    fn test_squeeze_expand() {
+        setup();
         let t = Tensor::arange(0.0, 6.0, Device::default());
-        let t = t.reshape(&[2, 3]).unwrap();
-        let t = t.transpose(None).unwrap();
-        assert_eq!(t.shape(), &[3, 2]);
-        assert_eq!(t.to_vec(), vec![0.0, 3.0, 1.0, 4.0, 2.0, 5.0]);
+        let t = t.reshape(&[1, 2, 1, 3, 1]).unwrap();
+        assert_eq!(t.shape(), &[1, 2, 1, 3, 1]);
+
+        let t_squeezed = t.squeeze(None).unwrap();
+        assert_eq!(t_squeezed.shape(), &[2, 3]);
+
+        let t_expanded = t_squeezed.expand_dims(1).unwrap();
+        assert_eq!(t_expanded.shape(), &[2, 1, 3]);
     }
 }

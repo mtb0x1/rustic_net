@@ -1,5 +1,4 @@
 use crate::trace_fn;
-use std::fmt;
 use tracing::{debug, error};
 
 /// Represents the shape of a tensor as a list of dimensions
@@ -18,7 +17,8 @@ impl Shape {
 
         let mut strides = vec![1; dims.len()];
         for i in (0..dims.len().saturating_sub(1)).rev() {
-            strides[i] = strides.get(i + 1).copied().unwrap_or(1) * dims.get(i + 1).copied().unwrap_or(1);
+            strides[i] =
+                strides.get(i + 1).copied().unwrap_or(1) * dims.get(i + 1).copied().unwrap_or(1);
         }
 
         let size = dims.iter().product();

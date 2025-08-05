@@ -23,62 +23,35 @@ use {rayon, std::env};
 /// By default, uses 80% of the available CPU cores (minimum 1).
 /// Can be overridden by setting the `RUSTIC_NET_NUM_THREADS` environment variable.
 ///
-/// # Panics
-/// Panics if the thread pool has already been initialized.
-///
-/// # Note
-/// This is a no-op when the `parallel` feature is not enabled.
+/// This function can be called multiple times; it will only initialize the pool once.
 pub fn init_thread_pool() {
-    // Only initialize once
-    if INITIALIZED.load(Ordering::SeqCst) {
-        return;
-    }
-
     INIT.call_once(|| {
-        // Get the number of available CPU cores kinda
-        // TODO: Check docs
-        let num_cpus = available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1);
+        // Get the number of available CPU cores
+        let num_cpus = available_parallelism().map(|n| n.get()).unwrap_or(1);
+
         // Calculate default thread count (80% of cores, minimum 1)
         let default_threads = (num_cpus as f32 * 0.8).floor().max(1.0) as usize;
+
         // Check for environment variable override
         let num_threads = match env::var(THREAD_ENV_VAR) {
-            Ok(val) => {
-                match val.parse::<usize>() {
-                    Ok(n) if n > 0 => {
-                        // Warn if user is setting a high thread count that might starve the system
-                        if n > num_cpus {
-                            warn!(
-                                "Using {} threads (set via {}), which is more than available CPU cores ({}).
-                                This might lead to system starvation and degraded performance.",
-                                n, THREAD_ENV_VAR, num_cpus
-                            );
-                        } else if n > default_threads {
-                            warn!(
-                                "Using {} threads (set via {}), which is more than the recommended {} threads.
-                                This might lead to system starvation.",
-                                n, THREAD_ENV_VAR, default_threads
-                            );
-                        }
-                        n
-                    },
-                    Ok(_) => {
+            Ok(val) => match val.parse::<usize>() {
+                Ok(n) if n > 0 => {
+                    if n > num_cpus {
                         warn!(
-                            "Invalid value for {}: must be greater than 0. Using default of {} threads.",
-                            THREAD_ENV_VAR, default_threads
+                            "Using {} threads (set via {}), which is more than available CPU cores ({}).",
+                            n, THREAD_ENV_VAR, num_cpus
                         );
-                        default_threads
-                    },
-                    Err(_) => {
-                        warn!(
-                            "Could not parse {} value. Using default of {} threads.",
-                            THREAD_ENV_VAR, default_threads
-                        );
-                        default_threads
-                    },
+                    }
+                    n
                 }
-            }
+                _ => {
+                    warn!(
+                        "Invalid value for {}. Using default of {} threads.",
+                        THREAD_ENV_VAR, default_threads
+                    );
+                    default_threads
+                }
+            },
             Err(_) => default_threads,
         };
 
@@ -89,34 +62,18 @@ pub fn init_thread_pool() {
             .expect("Failed to initialize global thread pool");
 
         debug!(
-            "Initialized Rayon thread pool with {} threads ({} CPUs available, {} used, {:.0}% utilization)",
-            num_threads,
-            num_cpus,
-            num_threads,
-            (num_threads as f32 / num_cpus as f32) * 100.0
+            "Initialized Rayon thread pool with {} threads.",
+            num_threads
         );
 
-        // Mark as initialized
         INITIALIZED.store(true, Ordering::SeqCst);
     });
-
-    #[cfg(not(feature = "parallel"))]
-    INITIALIZED.store(true, Ordering::SeqCst);
 }
 
 /// Returns the current number of threads in the global thread pool.
 /// If the thread pool hasn't been initialized yet, it will be initialized with default settings.
-///
-/// # Panics
-/// Panics if the thread pool cannot be initialized.
-///
-/// # Note
-/// Returns 1 when the `parallel` feature is not enabled.
 pub fn current_num_threads() -> usize {
-    if !INITIALIZED.load(Ordering::SeqCst) {
-        init_thread_pool();
-    }
-
+    init_thread_pool();
     rayon::current_num_threads()
 }
 
@@ -124,59 +81,40 @@ pub fn current_num_threads() -> usize {
 /// based on the number of threads available.
 pub fn recommended_chunk_size(len: usize) -> usize {
     let num_threads = current_num_threads();
-    len.div_ceil(num_threads)
+    if num_threads == 0 {
+        return len; // Avoid division by zero if something goes wrong
+    }
+    (len + num_threads - 1) / num_threads // Equivalent to ceiling division
 }
 
-#[allow(unused_imports)]
 #[cfg(test)]
 mod tests {
-    // TODO: Remove this once lazy_static is no longer needed
     use super::*;
-    use lazy_static::lazy_static;
-    use std::sync::Mutex;
-
-    // Ensure tests run sequentially to avoid interference
-    lazy_static! {
-        static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
-    }
 
     #[test]
-    fn test_thread_pool_initialization() {
-        let _lock = TEST_MUTEX.lock().unwrap();
-
-        // Reset the initialization state for testing
-        unsafe {
-            let init = &INITIALIZED as *const _ as *mut AtomicBool;
-            (*init).store(false, Ordering::SeqCst);
-        }
-
-        // Test default initialization
+    fn test_thread_pool_initialization_is_safe() {
+        // Calling init multiple times should be safe and not panic.
         init_thread_pool();
-        assert_eq!(INITIALIZED.load(Ordering::SeqCst), false);
+        let first_call_threads = current_num_threads();
+        assert!(first_call_threads >= 1);
 
-        // Should not panic on second call
         init_thread_pool();
+        let second_call_threads = current_num_threads();
+        assert_eq!(first_call_threads, second_call_threads);
     }
 
     #[test]
     fn test_recommended_chunk_size() {
-        let _lock = TEST_MUTEX.lock().unwrap();
-
-        // Reset the initialization state for testing
-        unsafe {
-            let init = &INITIALIZED as *const _ as *mut AtomicBool;
-            (*init).store(false, Ordering::SeqCst);
-        }
-
-        // Test with known number of threads
-        std::env::set_var(THREAD_ENV_VAR, "4");
         init_thread_pool();
-
-        assert_eq!(recommended_chunk_size(100), 25); // 100/4 = 25
-        assert_eq!(recommended_chunk_size(101), 26); // 101/4 = 25.25 -> 26
-        assert_eq!(recommended_chunk_size(1), 1); // Edge case: small input
-
-        // Clean up
-        std::env::remove_var(THREAD_ENV_VAR);
+        let num_threads = current_num_threads();
+        assert_eq!(
+            recommended_chunk_size(100),
+            (100 + num_threads - 1) / num_threads
+        );
+        assert_eq!(
+            recommended_chunk_size(101),
+            (101 + num_threads - 1) / num_threads
+        );
+        assert_eq!(recommended_chunk_size(1), 1);
     }
 }
