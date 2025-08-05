@@ -1,0 +1,121 @@
+# Tensor Backend Refactoring Prompt
+
+## Objective
+Refactor the tensor implementation to support multiple backends with a clean, modular architecture that enables:
+1. Multiple execution strategies (sequential, parallel, SIMD)
+2. Easy addition of new backends (CPU, CUDA, WebGPU)
+3. Type safety and performance optimization
+4. Clear separation of concerns
+
+## Architecture Requirements
+
+### Backend Traits
+Define a set of traits that represent different categories of tensor operations:
+1. `UnaryOps` - Element-wise operations on single tensors (e.g., ReLU)
+2. `BinaryElementwiseOps` - Element-wise operations between two tensors (add, sub, mul, div)
+3. `MatOps` - Matrix operations (matmul)
+4. `ReductionOps` - Dimensionality reduction operations (sum, mean, max, min, argmax, argmin)
+5. `ScalarOps` - Operations between tensors and scalars
+6. `CreationOps` - Tensor creation operations
+
+### Backend Implementations
+Implement the following backends:
+1. `Cpu` - Basic sequential CPU implementation
+2. `CpuPar` - Parallel CPU implementation using Rayon
+3. `CpuSimd` - SIMD-accelerated CPU implementation
+4. `CpuSimdPar` - Combined SIMD and parallel CPU implementation
+
+### Tensor Core
+- Maintain a clean, device-agnostic API in the main Tensor type
+- Use dynamic dispatch to select the appropriate backend based on device and features
+- Ensure all operations preserve tensor metadata (shape, device, dtype)
+- Implement proper error handling and validation
+
+### Performance Considerations
+- Use `#[inline]` for small, frequently called functions
+- Pre-allocate output tensors when possible
+- Use SIMD intrinsics for performance-critical loops
+- Implement parallel iterators for CPU-bound operations
+- Minimize memory allocations and copies
+
+## Implementation Guidelines
+
+### Code Organization
+```
+src/
+  tensor/
+    backends/
+      mod.rs          # Re-export backends
+      traits.rs       # Operation traits
+      cpu.rs          # Sequential CPU backend
+      cpu_par.rs      # Parallel CPU backend
+      cpu_simd.rs     # SIMD CPU backend
+      cpu_simd_par.rs # Combined SIMD + parallel CPU backend
+    mod.rs           # Main tensor type and public API
+    shape.rs         # Shape manipulation
+    creation.rs      # Tensor creation functions
+    impl_ops.rs      # Operator overloading
+```
+
+### Error Handling
+- Define clear error types and messages
+- Validate inputs at API boundaries
+- Provide context for error conditions
+- Use `thiserror` or similar for error handling
+
+### Testing
+- Unit tests for each operation and backend
+- Property-based tests for mathematical properties
+- Benchmarking for performance-critical paths
+- Test edge cases (empty tensors, zero-strides, etc.)
+
+## Example Implementation
+
+### Backend Trait Example
+```rust
+pub trait UnaryOps {
+    fn relu(tensor: &Tensor) -> Result<Tensor, String>;
+}
+
+pub trait BinaryElementwiseOps {
+    fn add(a: &Tensor, b: &Tensor) -> Result<Tensor, String>;
+    fn sub(a: &Tensor, b: &Tensor) -> Result<Tensor, String>;
+    // ...
+}
+```
+
+### SIMD Implementation Example
+```rust
+impl UnaryOps for CpuSimd {
+    fn relu(tensor: &Tensor) -> Result<Tensor, String> {
+        let mut data = tensor.data.to_vec();
+        let len = data.len();
+        let (chunks, remainder) = data.as_mut_slice().split_at_mut(len - len % 8);
+
+        for chunk in chunks.chunks_mut(8) {
+            let simd_chunk = f32x8::from_slice(chunk);
+            let mask = simd_chunk.simd_gt(f32x8::splat(0.0));
+            let result = mask.select(simd_chunk, f32x8::splat(0.0));
+            result.copy_to_slice(chunk);
+        }
+        // ...
+    }
+}
+```
+
+## Performance Optimization Checklist
+- [ ] Use appropriate chunk sizes for parallel processing
+- [ ] Minimize bounds checking in hot loops
+- [ ] Use `#[inline(always)]` for small, frequently called functions
+- [ ] Implement proper alignment for SIMD operations
+- [ ] Use `rayon` for parallel iteration where beneficial
+- [ ] Profile and optimize memory access patterns
+- [ ] Implement proper drop behavior for device memory
+
+## Future Extensions
+1. Add GPU support via CUDA and WebGPU
+2. Implement sparse tensor support
+3. Add automatic differentiation
+4. Support for more data types (f64, i32, etc.)
+5. Quantization support
+6. JIT compilation of compute graphs

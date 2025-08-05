@@ -75,3 +75,39 @@ pub trait ReductionOps {
     /// Index of minimum value, optionally along an axis
     fn argmin(tensor: &Tensor, axis: Option<usize>) -> Result<Tensor, String>;
 }
+
+/// Defines element-wise operations between a tensor and a scalar.
+pub trait ScalarOps {
+    /// Element-wise addition with a scalar
+    fn add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String>;
+
+    /// Element-wise subtraction with a scalar
+    fn sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String>;
+
+    /// Element-wise multiplication with a scalar
+    fn mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String>;
+
+    /// Element-wise division with a scalar
+    fn div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String>;
+
+    /// Element-wise addition with a scalar (reverse)
+    fn r_add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String>;
+
+    /// Element-wise subtraction with a scalar (reverse)
+    fn r_sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String>;
+
+    /// Element-wise multiplication with a scalar (reverse)
+    fn r_mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String>;
+
+    /// Element-wise division with a scalar (reverse)
+    fn r_div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String>;
+}
+
+/// Defines tensor creation operations.
+pub trait CreationOps {
+    /// Creates a tensor with random values.
+    fn random(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String>;
+
+    /// Creates a 1D tensor with a range of values.
+    fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String>;
+}

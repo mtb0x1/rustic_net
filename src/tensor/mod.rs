@@ -4,11 +4,44 @@
 //! multi-dimensional array operations with CPU and GPU support.
 //!
 //! ## Key Features
-//! - N-dimensional tensor operations
-//! - Automatic differentiation
-//! - Device-agnostic API (CPU/GPU)
-//! - Memory-efficient views and in-place operations
-//! - Broadcasting and strided operations
+//! - **N-dimensional arrays**: Support for tensors of arbitrary rank
+//! - **Device-agnostic API**: Seamless CPU/GPU execution with the same interface
+//! - **Efficient memory layout**: Row-major order with configurable strides
+//! - **Automatic broadcasting**: Operations on tensors of different shapes
+//! - **View semantics**: Zero-copy operations like reshape and transpose
+//! - **Comprehensive operations**: Linear algebra, element-wise ops, reductions
+//! - **Thread-safe**: Designed for concurrent use across threads
+//!
+//! ## Quick Start
+//! ```rust
+//! use rustic_net::tensor::{Tensor, Device};
+//!
+//! // Create tensors
+//! let a = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], &[2, 2], Device::default())?;
+//! let b = Tensor::from_vec(vec![5.0, 6.0, 7.0, 8.0], &[2, 2], Device::default())?;
+//!
+//! // Perform operations
+//! let c = a.matmul(&b)?;  // Matrix multiplication
+//! let d = c.relu()?;      // ReLU activation
+//! let e = d.sum(Some(0))?; // Sum along first dimension
+//! # Ok::<(), String>(())
+//! ```
+//!
+//! ## Design Philosophy
+//! - **Performance**: Optimized for both small and large tensors
+//! - **Safety**: Compile-time and runtime checks for valid operations
+//! - **Ergonomics**: Intuitive API with sensible defaults
+//! - **Extensibility**: Easy to add new operations and backends
+//!
+//! ## Memory Management
+//! - Tensors use `Arc` for reference counting
+//! - Data is shared between tensor views
+//! - Explicit `.clone()` is required for deep copies
+//!
+//! ## Device Support
+//! - **CPU**: Highly optimized for all tensor operations
+//! - **CUDA**: GPU acceleration (when `cuda` feature is enabled)
+//! - **WebGPU**: Browser-based GPU acceleration (when `wasm` feature is enabled)
 
 use crate::trace_fn;
 use std::fmt;
@@ -19,17 +52,13 @@ pub mod creation;
 pub mod impl_ops;
 pub mod shape;
 
-use backends::traits::{BinaryElementwiseOps, MatOps, ReductionOps, UnaryOps};
+use backends::{
+    traits::{BinaryElementwiseOps, MatOps, ReductionOps, UnaryOps},
+    Cpu,
+};
 pub use creation::*;
 pub use shape::Shape;
 pub use tracing::debug;
-
-#[cfg(feature = "parallel")]
-use backends::cpu_par::CpuParallel;
-#[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
-use backends::cpu_seq::CpuSequential;
-#[cfg(all(not(feature = "parallel"), feature = "simd"))]
-use backends::cpu_simd::CpuSimd;
 
 #[cfg(feature = "parallel")]
 pub use crate::parallel;
@@ -37,14 +66,44 @@ pub use crate::parallel;
 /// Compute device for tensor storage and operations.
 ///
 /// Tensors can be allocated on different devices, with operations
-/// automatically dispatched to the appropriate backend.
+/// automatically dispatched to the appropriate backend. The device
+/// determines where tensor computations are performed.
+///
+/// # Examples
+/// ```rust
+/// use rustic_net::tensor::Device;
+///
+/// // Default CPU device
+/// let device1 = Device::default();
+///
+/// // Specific CPU device (for multi-socket systems)
+/// let device2 = Device::Cpu(Some(1));
+///
+/// // CUDA device (requires 'cuda' feature)
+/// #[cfg(feature = "cuda")]
+/// let device3 = Device::Cuda(0);
+/// ```
+///
+/// # Thread Safety
+/// All device variants are `Send` and `Sync`, allowing them to be shared across threads.
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Device {
-    /// CPU device with optional device ID (useful for multi-CPU systems)
+    /// CPU device with optional device ID
+    ///
+    /// - `None`: Default CPU device
+    /// - `Some(n)`: Specific CPU device (useful for NUMA systems)
     Cpu(Option<usize>),
+
     /// CUDA device with device ID
+    ///
+    /// Requires the `cuda` feature. The ID corresponds to the CUDA device index.
+    #[cfg(feature = "cuda")]
     Cuda(usize),
+
     /// WebGPU device with device ID
+    ///
+    /// Requires the `wasm` feature. The ID corresponds to the WebGPU adapter index.
+    #[cfg(feature = "webgpu")]
     WebGpu(usize),
 }
 
@@ -59,13 +118,33 @@ impl Default for Device {
 
 /// Numeric type of tensor elements.
 ///
-/// Currently supports 32-bit floating point (f32).
-/// Future versions may add support for other numeric types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Defines the data type of elements stored in a tensor. Currently,
+/// only 32-bit floating point (f32) is supported, but the enum is
+/// designed to be extended with additional types in the future.
+///
+/// # Examples
+/// ```rust
+/// use rustic_net::tensor::DType;
+///
+/// let dtype = DType::F32;
+/// assert_eq!(dtype.size_of(), 4);  // 4 bytes for f32
+/// ```
+///
+/// # Type Safety
+/// The `DType` enum ensures type safety by preventing incompatible operations
+/// between tensors of different data types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DType {
-    /// 32-bit floating point
-    #[default]
+    /// 32-bit floating point number (IEEE 754)
+    ///
+    /// - Size: 4 bytes
+    /// - Range: Approximately ±3.4 × 10^38 with 7 decimal digits of precision
     F32,
+    // Future types:
+    // F64,
+    // I32,
+    // I64,
+    // U8,
 }
 
 impl DType {
@@ -104,18 +183,61 @@ impl TryFrom<DType> for &str {
 
 /// Multi-dimensional array (tensor) for numerical computing.
 ///
-/// The core data structure in Rustic Net, supporting a variety of
-/// mathematical operations and linear algebra functions.
+/// The core data structure in Rustic Net, representing an N-dimensional array
+/// of numeric values. Tensors support a wide range of mathematical operations
+/// and are the fundamental building block for machine learning models.
+///
+/// # Design
+/// - **Data Layout**: Row-major order (C-style)
+/// - **Memory**: Reference-counted with `Arc` for efficient sharing
+/// - **Device-Agnostic**: Same API for CPU and GPU tensors
+/// - **Thread-Safe**: Implements `Send` and `Sync`
+///
+/// # Examples
+/// ```rust
+/// use rustic_net::tensor::{Tensor, Device};
+///
+/// // Create a 2x3 tensor from a vector
+/// let t = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3], Device::default())?;
+///
+/// // Perform operations
+/// let t_squared = t.mul(&t)?;  // Element-wise multiplication
+/// let t_sum = t.sum(None)?;    // Sum all elements
+/// # Ok::<(), String>(())
+/// ```
+///
+/// # Performance Considerations
+/// - **Views**: Operations like `reshape()` and `transpose()` return views that share data
+/// - **Cloning**: Use `.clone()` sparingly as it performs a deep copy
+/// - **Device Transfers**: Moving data between devices is expensive
+/// - **In-Place Operations**: Methods with `_` suffix (e.g., `add_()`) modify in-place
+///
+/// # Memory Management
+/// Tensors use reference counting to manage memory. The underlying data is automatically
+/// deallocated when the last tensor referencing it is dropped.
 #[derive(Clone)]
 pub struct Tensor {
-    /// The underlying data buffer
-    pub(crate) data: Arc<Vec<f32>>,
+    /// The underlying tensor data
+    ///
+    /// Stored in row-major order (C-style) with the last index changing fastest.
+    /// For example, a 2x3 tensor is stored as [a11, a12, a13, a21, a22, a23].
+    pub data: Arc<Vec<f32>>,
+
     /// The shape of the tensor
-    pub(crate) shape: Shape,
-    /// The device where the tensor data is stored
-    pub(crate) device: Device,
+    ///
+    /// Defines the number of dimensions and size of each dimension.
+    /// For example, a 2x3 matrix has shape [2, 3].
+    pub shape: Shape,
+
+    /// The device where the tensor is stored
+    ///
+    /// Determines where computations are performed (CPU/GPU).
+    pub device: Device,
+
     /// The data type of tensor elements
-    pub(crate) dtype: DType,
+    ///
+    /// Currently only `DType::F32` is supported.
+    pub dtype: DType,
 }
 
 impl Tensor {
@@ -197,99 +319,37 @@ impl Tensor {
     /// Applies the ReLU activation function element-wise
     pub fn relu(&self) -> Result<Self, String> {
         trace_fn!("Tensor::relu");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::relu(self)
-        }
-        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
-        {
-            CpuSimd::relu(self)
-        }
-        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
-        {
-            CpuSequential::relu(self)
-        }
+        Cpu::relu(self)
     }
 
     /// Element-wise addition with another tensor
     pub fn add(&self, other: &Self) -> Result<Self, String> {
         trace_fn!("Tensor::add");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::add(self, other)
-        }
-        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
-        {
-            CpuSimd::add(self, other)
-        }
-        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
-        {
-            CpuSequential::add(self, other)
-        }
+        Cpu::add(self, other)
     }
 
     /// Element-wise subtraction with another tensor
     pub fn sub(&self, other: &Self) -> Result<Self, String> {
         trace_fn!("Tensor::sub");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::sub(self, other)
-        }
-        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
-        {
-            CpuSimd::sub(self, other)
-        }
-        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
-        {
-            CpuSequential::sub(self, other)
-        }
+        Cpu::sub(self, other)
     }
 
     /// Element-wise multiplication with another tensor
     pub fn mul(&self, other: &Self) -> Result<Self, String> {
         trace_fn!("Tensor::mul");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::mul(self, other)
-        }
-        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
-        {
-            CpuSimd::mul(self, other)
-        }
-        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
-        {
-            CpuSequential::mul(self, other)
-        }
+        Cpu::mul(self, other)
     }
 
     /// Element-wise division by another tensor
     pub fn div(&self, other: &Self) -> Result<Self, String> {
         trace_fn!("Tensor::div");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::div(self, other)
-        }
-        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
-        {
-            CpuSimd::div(self, other)
-        }
-        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
-        {
-            CpuSequential::div(self, other)
-        }
+        Cpu::div(self, other)
     }
 
     /// Matrix multiplication with another tensor
     pub fn matmul(&self, other: &Self) -> Result<Self, String> {
         trace_fn!("Tensor::matmul");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::matmul(self, other)
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            CpuSequential::matmul(self, other)
-        }
+        Cpu::matmul(self, other)
     }
 
     // ===== Reduction Operations =====
@@ -297,79 +357,37 @@ impl Tensor {
     /// Computes the sum of tensor elements along the specified axis
     pub fn sum(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::sum");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::sum(self, axis)
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            CpuSequential::sum(self, axis)
-        }
+        Cpu::sum(self, axis)
     }
 
     /// Computes the mean of tensor elements along the specified axis
     pub fn mean(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::mean");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::mean(self, axis)
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            CpuSequential::mean(self, axis)
-        }
+        Cpu::mean(self, axis)
     }
 
     /// Finds the maximum value along the specified axis
     pub fn max(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::max");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::max(self, axis)
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            CpuSequential::max(self, axis)
-        }
+        Cpu::max(self, axis)
     }
 
     /// Finds the minimum value along the specified axis
     pub fn min(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::min");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::min(self, axis)
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            CpuSequential::min(self, axis)
-        }
+        Cpu::min(self, axis)
     }
 
     /// Finds the index of the maximum value along the specified axis
     pub fn argmax(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::argmax");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::argmax(self, axis)
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            CpuSequential::argmax(self, axis)
-        }
+        Cpu::argmax(self, axis)
     }
 
     /// Finds the index of the minimum value along the specified axis
     pub fn argmin(&self, axis: Option<usize>) -> Result<Self, String> {
         trace_fn!("Tensor::argmin");
-        #[cfg(feature = "parallel")]
-        {
-            CpuParallel::argmin(self, axis)
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            CpuSequential::argmin(self, axis)
-        }
+        Cpu::argmin(self, axis)
     }
 
     // ===== Shape Manipulation =====
@@ -493,6 +511,7 @@ impl Tensor {
     // ===== Device Management =====
 
     /// Moves the tensor to the specified device
+    #[allow(unreachable_patterns)]
     pub fn to_device(&self, device: Device) -> Result<Self, String> {
         trace_fn!("Tensor::to_device");
         if self.device == device {

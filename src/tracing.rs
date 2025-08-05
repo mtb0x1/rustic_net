@@ -6,24 +6,82 @@
 //!
 //! ## Key Features
 //! - Environment-based log level configuration (`RUST_LOG`)
-//! - Function entry/exit tracing
-//! - Operation performance monitoring
-//! - Tensor operation analytics
-//! - Model execution profiling
+//! - Function entry/exit tracing with `#[trace_fn]` macro
+//! - Operation performance monitoring and timing
+//! - Tensor operation analytics (shapes, dtypes, devices)
+//! - Model execution profiling and bottleneck detection
+//! - Thread-aware logging with source locations
+//! - Structured JSON output for machine processing
+//! - Custom tracing spans for operations and model components
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use rustic_net::RusticNetInitTracing;
+//! use tracing::{info, debug};
+//!
+//! // Initialize with default settings (logs errors and above)
+//! RusticNetInitTracing();
+//!
+//! // Log messages at different levels
+//! info!("Application started");
+//! debug!(tensor_shape = "[2, 3, 224, 224]", "Processing batch");
+//! ```
+//!
+//! ## Configuration
+//!
+//! Control log levels via the `RUST_LOG` environment variable:
+//! ```bash
+//! # Set log level for all crates
+//! RUST_LOG=info cargo run
+//!
+//! # Enable debug logging for rustic_net only
+//! RUST_LOG=rustic_net=debug cargo run
+//!
+//! # Enable trace logging for specific modules
+//! RUST_LOG=rustic_net::tensor=debug,rustic_net::model=info cargo run
+//! ```
+//!
+//! ## Performance Considerations
+//! - Tracing is compiled out completely at compile time for release builds
+//! - Use `debug!` and `trace!` macros for verbose debugging
+//! - Use `info!` for important application events
+//! - Use `warn!` for recoverable errors
+//! - Use `error!` for critical failures
 
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Initializes the global tracing subscriber with production-appropriate defaults.
 ///
-/// Configures and installs a tracing subscriber with:
-/// - Environment-based log level filtering (`RUST_LOG`)
-/// - Thread-aware logging with source locations
-/// - Structured JSON output for machine processing
-/// - Default log level: ERROR
+/// This function sets up a global tracing subscriber that will process all
+/// tracing events from the Rustic Net library. It should be called early in
+/// your application's `main` function.
+///
+/// # Configuration
+/// - **Log Levels**: Controlled via `RUST_LOG` environment variable
+/// - **Default Level**: ERROR (if `RUST_LOG` is not set)
+/// - **Output**: Human-readable format with colors (in terminal)
+/// - **Includes**: Thread IDs, source file locations, and line numbers
+///
+/// # Environment Variables
+/// - `RUST_LOG`: Controls log levels (e.g., `trace`, `debug`, `info`, `warn`, `error`)
+/// - `RUST_LOG_STYLE`: Set to `0` to disable colored output
+///
+/// # Example
+/// ```
+/// use rustic_net::RusticNetInitTracing;
+///
+/// // Initialize tracing first
+/// RusticNetInitTracing();
+///
+/// // Now all tracing macros will work
+/// tracing::info!("Application started");
+/// ```
 ///
 /// # Panics
-/// If the global subscriber cannot be initialized.
+/// - If the global subscriber cannot be initialized
+/// - If there's an error reading environment variables
 pub fn init_tracing() {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("rustic_net=error"));
@@ -42,12 +100,44 @@ pub fn init_tracing() {
     info!("RusticNet tracing initialized");
 }
 
-/// Instruments a function with automatic entry/exit tracing.
+/// A macro to automatically instrument functions with tracing spans.
 ///
-/// Creates a TRACE-level span that:
-/// - Automatically logs function entry
-/// - Captures function parameters (optional)
-/// - Closes span on scope exit
+/// This attribute macro can be applied to any function to automatically:
+/// - Create a TRACE-level span when the function is entered
+/// - Log the function's parameters (if any)
+/// - Log the function's return value (if any)
+/// - Automatically close the span when the function exits
+/// - Handle both `Result` and direct return types
+///
+/// # Usage
+/// ```rust
+/// use rustic_net::trace_fn;
+///
+/// fn process_data(data: &[f32], scale: f32) -> Vec<f32> {
+///     trace_fn!("process_data");
+///     data.iter().map(|x| x * scale).collect()
+/// }
+///
+/// fn load_model(path: &str) -> Result<(), String> {
+///     trace_fn!("load_model");
+///     // Implementation...
+///     Ok(())
+/// }
+/// ```
+///
+/// # Generated Code
+/// The macro expands to something like:
+/// ```rust,ignore
+/// fn process_data(data: &[f32], scale: f32) -> Vec<f32> {
+///     trace_fn!("process_data", data_len => data.len(), scale => scale);
+///     let result = { /* original function body */ };
+///     result
+/// }
+/// ```
+///
+/// # Performance
+/// - In release builds with `tracing` level above `TRACE`, the spans are optimized away
+/// - Function parameters are only evaluated if the corresponding log level is enabled
 ///
 /// # Examples
 /// ```rust

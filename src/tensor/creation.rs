@@ -3,12 +3,9 @@
 //! Factory functions for creating tensors with various initializations and data sources.
 //! Provides both simple constructors and more advanced factory methods for tensor creation.
 
-use super::{DType, Device, Shape, Tensor};
+use super::{backends::traits::CreationOps, backends::Cpu, DType, Device, Shape, Tensor};
 use crate::trace_fn;
 use std::sync::Arc;
-
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 
 /// Creates a tensor from a vector with the specified shape and device.
 ///
@@ -155,29 +152,7 @@ pub fn identity(size: usize, device: Device) -> Tensor {
 /// ```
 pub fn random(shape: &[usize], device: Device) -> Tensor {
     trace_fn!("tensor::creation::random");
-    let size: usize = shape.iter().product();
-
-    #[cfg(feature = "parallel")]
-    let data: Vec<f32> = {
-        use rand::{Rng, SeedableRng};
-        use rand_chacha::ChaCha8Rng;
-        (0..size)
-            .into_par_iter()
-            .map_init(
-                || ChaCha8Rng::from_seed(rand::thread_rng().gen()),
-                |rng, _| rng.gen_range(0.0..1.0),
-            )
-            .collect()
-    };
-
-    #[cfg(not(feature = "parallel"))]
-    let data: Vec<f32> = {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        (0..size).map(|_| rng.gen_range(0.0..1.0)).collect()
-    };
-
-    from_vec(data, shape, device).unwrap()
+    Cpu::random(shape, device).unwrap()
 }
 
 /// Creates a 1D tensor with values in the range [start, end).
@@ -198,16 +173,5 @@ pub fn random(shape: &[usize], device: Device) -> Tensor {
 /// ```
 pub fn arange(start: f32, end: f32, device: Device) -> Tensor {
     trace_fn!("tensor::creation::arange");
-    let size = (end - start).abs() as usize;
-
-    #[cfg(feature = "parallel")]
-    let data: Vec<f32> = (0..size)
-        .into_par_iter()
-        .map(|i| start + i as f32)
-        .collect();
-
-    #[cfg(not(feature = "parallel"))]
-    let data: Vec<f32> = (0..size).map(|i| start + i as f32).collect();
-
-    from_vec(data, &[size], device).unwrap()
+    Cpu::arange(start, end, device).unwrap()
 }

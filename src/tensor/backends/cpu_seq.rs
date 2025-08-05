@@ -23,7 +23,7 @@ pub struct CpuSequential;
 impl UnaryOps for CpuSequential {
     fn relu(tensor: &Tensor) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::relu");
-        let data = tensor
+        let data: Vec<f32> = tensor
             .data
             .iter()
             .map(|&x| if x > 0.0 { x } else { 0.0 })
@@ -250,6 +250,111 @@ where
             }
             Ok(Tensor::from_vec(result_data, &output_shape, tensor.device).unwrap())
         }
+    }
+}
+
+impl ScalarOps for CpuSequential {
+    fn add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        let data: Vec<f32> = tensor.data.iter().map(|&x| x + scalar).collect();
+        Ok(Tensor {
+            data: Arc::new(data),
+            shape: tensor.shape.clone(),
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+
+    fn sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        let data: Vec<f32> = tensor.data.iter().map(|&x| x - scalar).collect();
+        Ok(Tensor {
+            data: Arc::new(data),
+            shape: tensor.shape.clone(),
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+
+    fn mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        let data: Vec<f32> = tensor.data.iter().map(|&x| x * scalar).collect();
+        Ok(Tensor {
+            data: Arc::new(data),
+            shape: tensor.shape.clone(),
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+
+    fn div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        if scalar == 0.0 {
+            return Err("Division by zero".to_string());
+        }
+        let data: Vec<f32> = tensor.data.iter().map(|&x| x / scalar).collect();
+        Ok(Tensor {
+            data: Arc::new(data),
+            shape: tensor.shape.clone(),
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+
+    fn r_add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        let data: Vec<f32> = tensor.data.iter().map(|&x| scalar + x).collect();
+        Ok(Tensor {
+            data: Arc::new(data),
+            shape: tensor.shape.clone(),
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+
+    fn r_sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        let data: Vec<f32> = tensor.data.iter().map(|&x| scalar - x).collect();
+        Ok(Tensor {
+            data: Arc::new(data),
+            shape: tensor.shape.clone(),
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+
+    fn r_mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        let data: Vec<f32> = tensor.data.iter().map(|&x| scalar * x).collect();
+        Ok(Tensor {
+            data: Arc::new(data),
+            shape: tensor.shape.clone(),
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+
+    fn r_div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
+        let data: Vec<f32> = tensor
+            .data
+            .iter()
+            .map(|&x| if x == 0.0 { f32::NAN } else { scalar / x })
+            .collect();
+        Ok(Tensor {
+            data: Arc::new(data),
+            shape: tensor.shape.clone(),
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+}
+
+impl CreationOps for CpuSequential {
+    fn random(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        use rand::Rng;
+        let size: usize = shape.iter().product();
+        let mut rng = rand::thread_rng();
+        let data: Vec<f32> = (0..size).map(|_| rng.gen_range(0.0..1.0)).collect();
+        Tensor::from_vec(data, shape, device)
+    }
+
+    fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String> {
+        let size = (end - start).abs() as usize;
+        let data: Vec<f32> = (0..size).map(|i| start + i as f32).collect();
+        Tensor::from_vec(data, &[size], device)
     }
 }
 
