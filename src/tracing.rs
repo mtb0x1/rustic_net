@@ -17,7 +17,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 /// Initializes the global tracing subscriber with default configuration.
 ///
 /// This function sets up a tracing subscriber with the following features:
-/// - Log level controlled by `RUST_LOG` environment variable (defaults to `rustic_net=trace`)
+/// - Log level controlled by `RUST_LOG` environment variable (defaults to `rustic_net=error`)
 /// - Includes thread IDs in log output
 /// - Includes source file and line numbers in log output
 /// - Outputs to stderr
@@ -26,7 +26,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 /// Panics if the global default subscriber cannot be set.
 pub fn init_tracing() {
     let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("rustic_net=trace"));
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("rustic_net=error"));
 
     tracing_subscriber::registry()
         .with(
