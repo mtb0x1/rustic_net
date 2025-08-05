@@ -69,7 +69,7 @@ macro_rules! trace_fn {
         tracing::trace!("Entering function: {}", $fn_name);
     };
     ($fn_name:expr, $($key:expr => $value:expr),*) => {
-        let _span = tracing::span!(tracing::Level::TRACE, $fn_name, $($key = $value),*).entered();
+        let _span = tracing::span!(tracing::Level::TRACE, $fn_name, $("{}" ,$key = $value),*).entered();
         tracing::trace!("Entering function: {}", $fn_name);
     };
 }
