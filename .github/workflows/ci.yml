@@ -72,10 +72,9 @@ jobs:
     - name: Check formatting
       run: cargo fmt -- --check
 
-    # TODO: Remove --no-default-features when all features are supported
     - name: Generate docs
       run: |
-        cargo doc --no-default-features --no-deps --document-private-items
+        cargo doc --features docsrs --no-deps --document-private-items
         echo '<!DOCTYPE html>
         <html>
         <head>

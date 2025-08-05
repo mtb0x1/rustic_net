@@ -5,10 +5,6 @@ edition = "2021"
 authors = ["mtb0x1 <mtb0x10x1@gmail.com>"]
 license-file = "LICENSE"
 
-[package.metadata.docs.rs]
-features = ["parallel", "simd", "simd_and_parallel", "cuda", "webgpu"]
-rustdoc-args = ["--cfg", "docsrs"]
-
 [features]
 default = []
 parallel = ["dep:rayon", "dep:rand_chacha", "dep:lazy_static"]
@@ -16,6 +12,9 @@ simd = []
 simd_and_parallel = ["dep:rayon", "dep:rand_chacha", "dep:lazy_static"]
 cuda = []
 webgpu = []
+
+#dummy features for docsrs
+docsrs = ["dep:rayon", "dep:rand_chacha", "dep:lazy_static"]
 
 [dependencies]
 criterion = { version = "0.7.0", features = ["html_reports"]}

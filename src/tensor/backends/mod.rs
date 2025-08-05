@@ -34,7 +34,8 @@ pub mod traits;
     not(feature = "simd"),
     not(feature = "simd_and_parallel"),
     not(feature = "cuda"),
-    not(feature = "webgpu")
+    not(feature = "webgpu"),
+    not(feature = "docsrs")
 ))]
 pub mod cpu_seq;
 
@@ -43,24 +44,42 @@ pub mod cpu_seq;
     not(feature = "simd"),
     not(feature = "simd_and_parallel"),
     not(feature = "cuda"),
-    not(feature = "webgpu")
+    not(feature = "webgpu"),
+    //not(feature = "docsrs") don't add this feature to docsrs
 ))]
+/// `as Cpu` is a marker type for the CPU backend (default : `cpu_seq`).
 pub use cpu_seq::CpuSequential as Cpu;
 
-#[cfg(feature = "simd")]
+#[cfg(all(feature = "simd", not(feature = "docsrs")))]
 pub mod cpu_simd;
 
-#[cfg(feature = "simd")]
+#[cfg(all(feature = "simd", not(feature = "docsrs")))]
 pub use cpu_simd::CpuSimd as Cpu;
 
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(feature = "docsrs")))]
 pub mod cpu_par;
 
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", not(feature = "docsrs")))]
 pub use cpu_par::CpuParallel as Cpu;
 
-#[cfg(feature = "simd_and_parallel")]
+#[cfg(all(feature = "simd_and_parallel", not(feature = "docsrs")))]
 pub mod cpu_simd_par;
 
-#[cfg(feature = "simd_and_parallel")]
+#[cfg(all(feature = "simd_and_parallel", not(feature = "docsrs")))]
 pub use cpu_simd_par::CpuSimdPar as Cpu;
+
+// do not edit, this is needed by docsrs
+#[cfg(feature = "docsrs")]
+pub mod cpu_seq;
+
+// do not edit, this is needed by docsrs
+#[cfg(feature = "docsrs")]
+pub mod cpu_simd;
+
+// do not edit, this is needed by docsrs
+#[cfg(feature = "docsrs")]
+pub mod cpu_par;
+
+// do not edit, this is needed by docsrs
+#[cfg(feature = "docsrs")]
+pub mod cpu_simd_par;
