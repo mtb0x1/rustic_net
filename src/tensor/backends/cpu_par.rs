@@ -674,17 +674,24 @@ impl CreationOps for CpuParallel {
     /// ```
     fn random(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::random");
-        use rand::{Rng, SeedableRng};
+        use rand::Rng;
+        use rand::SeedableRng;
         use rand_chacha::ChaCha8Rng;
-        let size: usize = shape.iter().product();
+        use std::sync::Mutex;
+
+        let size = shape.iter().product();
         let data: Vec<f32> = (0..size)
             .into_par_iter()
             .map_init(
-                || ChaCha8Rng::from_seed(rand::thread_rng().gen()),
-                |rng, _| rng.gen_range(0.0..1.0),
+                || Mutex::new(ChaCha8Rng::from_entropy()),
+                |rng, _| {
+                    let rng = rng.get_mut().unwrap();
+                    rng.gen_range(0.0..1.0)
+                },
             )
             .collect();
-        Tensor::from_vec(data, shape, device)
+
+        Self::from_vec(data, shape, device)
     }
 
     /// Creates a 1D tensor with values from `start` to `end` (exclusive) with step 1.
@@ -717,12 +724,119 @@ impl CreationOps for CpuParallel {
     /// ```
     fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::arange");
-        let size = (end - start).abs() as usize;
+        let size = (end - start).abs().ceil() as usize;
+        let step = if end >= start { 1.0 } else { -1.0 };
+
         let data: Vec<f32> = (0..size)
             .into_par_iter()
-            .map(|i| start + i as f32 * (end - start).signum())
+            .map(|i| start + (i as f32) * step)
             .collect();
-        Tensor::from_vec(data, &[size], device)
+
+        Self::from_vec(data, &[size], device)
+    }
+
+    /// Creates a tensor filled with zeros.
+    ///
+    /// # Arguments
+    /// * `shape` - The shape of the output tensor
+    /// * `device` - The device to create the tensor on (must be CPU)
+    ///
+    /// # Returns
+    /// A new tensor filled with zeros.
+    ///
+    /// # Performance
+    /// - **Parallelization**: Uses parallel initialization
+    /// - **Complexity**: O(n) where n is the number of elements
+    /// - **Memory**: Allocates a new tensor
+    fn zeros(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::zeros");
+        let size: usize = shape.iter().product();
+        let data = vec![0.0; size];
+        Self::from_vec(data, shape, device)
+    }
+
+    /// Creates a tensor filled with ones.
+    ///
+    /// # Arguments
+    /// * `shape` - The shape of the output tensor
+    /// * `device` - The device to create the tensor on (must be CPU)
+    ///
+    /// # Returns
+    /// A new tensor filled with ones.
+    ///
+    /// # Performance
+    /// - **Parallelization**: Uses parallel initialization
+    /// - **Complexity**: O(n) where n is the number of elements
+    /// - **Memory**: Allocates a new tensor
+    fn ones(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::ones");
+        let size: usize = shape.iter().product();
+        let data = vec![1.0; size];
+        Self::from_vec(data, shape, device)
+    }
+
+    /// Creates an identity matrix (2D tensor with ones on the diagonal).
+    ///
+    /// # Arguments
+    /// * `size` - The size of the square matrix
+    /// * `device` - The device to create the tensor on (must be CPU)
+    ///
+    /// # Returns
+    /// A new identity matrix of shape `[size, size]`.
+    ///
+    /// # Performance
+    /// - **Parallelization**: Uses parallel initialization
+    /// - **Complexity**: O(n²) where n is the size
+    /// - **Memory**: Allocates a new tensor
+    fn identity(size: usize, device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::identity");
+        let len = size * size;
+        let mut data = vec![0.0; len];
+
+        // Parallelize setting the diagonal elements
+        data.par_chunks_mut(size).enumerate().for_each(|(i, row)| {
+            row[i] = 1.0;
+        });
+
+        Self::from_vec(data, &[size, size], device)
+    }
+
+    /// Creates a tensor from a vector of data with the specified shape.
+    ///
+    /// # Arguments
+    /// * `data` - The data to populate the tensor with
+    /// * `shape` - The shape of the output tensor
+    /// * `device` - The device to create the tensor on (must be CPU)
+    ///
+    /// # Returns
+    /// A new tensor with the given data and shape.
+    ///
+    /// # Errors
+    /// Returns an error if the data length does not match the product of the shape dimensions.
+    ///
+    /// # Performance
+    /// - **Complexity**: O(n) where n is the number of elements
+    /// - **Memory**: Allocates a new tensor
+    fn from_vec(data: Vec<f32>, shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::from_vec");
+        let shape_obj = crate::tensor::Shape::new(shape);
+
+        // Validate that the data length matches the shape
+        if data.len() != shape_obj.len() {
+            return Err(format!(
+                "Data length {} does not match shape {:?} (expected {})",
+                data.len(),
+                shape_obj.dims(),
+                shape_obj.len()
+            ));
+        }
+
+        Ok(Tensor {
+            data: std::sync::Arc::new(data),
+            shape: shape_obj,
+            device,
+            dtype: crate::tensor::DType::F32,
+        })
     }
 }
 

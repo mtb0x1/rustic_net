@@ -48,15 +48,15 @@ use std::fmt;
 use std::sync::Arc;
 
 pub mod backends;
-pub mod creation;
+
 pub mod impl_ops;
 pub mod shape;
 
 use backends::{
-    traits::{BinaryElementwiseOps, MatOps, ReductionOps, UnaryOps},
+    traits::{BinaryElementwiseOps, MatOps, ReductionOps, UnaryOps, CreationOps},
     Cpu,
 };
-pub use creation::*;
+
 pub use shape::Shape;
 pub use tracing::debug;
 
@@ -249,37 +249,37 @@ impl Tensor {
         shape: &[usize],
         device: Device,
     ) -> Result<Self, String> {
-        from_vec(data, shape, device)
+        Cpu::from_vec(data.into(), shape, device)
     }
 
     /// Creates a new tensor from a slice with the given shape
     pub fn from_slice(slice: &[f32], shape: &[usize], device: Device) -> Result<Self, String> {
-        from_slice(slice, shape, device)
+        Cpu::from_slice(slice, shape, device)
     }
 
     /// Creates a new tensor filled with zeros
     pub fn zeros(shape: &[usize], device: Device) -> Self {
-        zeros(shape, device)
+        Cpu::zeros(shape, device).expect("Failed to create zeros tensor")
     }
 
     /// Creates a new tensor filled with ones
     pub fn ones(shape: &[usize], device: Device) -> Self {
-        ones(shape, device)
+        Cpu::ones(shape, device).expect("Failed to create ones tensor")
     }
 
     /// Creates an identity matrix of the given size
     pub fn identity(size: usize, device: Device) -> Self {
-        identity(size, device)
+        Cpu::identity(size, device).expect("Failed to create identity tensor")
     }
 
     /// Creates a new tensor with random values between 0.0 and 1.0
     pub fn random(shape: &[usize], device: Device) -> Self {
-        random(shape, device)
+        Cpu::random(shape, device).expect("Failed to create random tensor")
     }
 
     /// Creates a new 1D tensor with values from start to end (exclusive)
     pub fn arange(start: f32, end: f32, device: Device) -> Self {
-        arange(start, end, device)
+        Cpu::arange(start, end, device).expect("Failed to create arange tensor")
     }
 
     // ===== Accessors =====

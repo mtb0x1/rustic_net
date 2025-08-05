@@ -36,12 +36,13 @@ pub mod cpu_simd;
 #[cfg(feature = "parallel")]
 pub mod cpu_par;
 
-#[cfg(all(feature = "simd_and_parallel"))]
+#[cfg(feature = "simd_and_parallel")]
 pub mod cpu_simd_par;
 
 #[cfg(all(
     not(feature = "parallel"),
     not(feature = "simd"),
+    not(feature = "simd_and_parallel"),
     not(feature = "cuda"),
     not(feature = "webgpu")
 ))]
@@ -53,5 +54,5 @@ pub use cpu_simd::CpuSimd as Cpu;
 #[cfg(feature = "parallel")]
 pub use cpu_par::CpuParallel as Cpu;
 
-#[cfg(all(feature = "simd_and_parallel"))]
+#[cfg(feature = "simd_and_parallel")]
 pub use cpu_simd_par::CpuSimdPar as Cpu;

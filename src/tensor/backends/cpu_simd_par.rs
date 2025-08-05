@@ -552,31 +552,89 @@ impl ScalarOps for CpuSimdPar {
 impl CreationOps for CpuSimdPar {
     fn random(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSimdPar::random");
-        use rand::{Rng, SeedableRng};
+        use rand::Rng;
+        use rand::SeedableRng;
         use rand_chacha::ChaCha8Rng;
-        let size: usize = shape.iter().product();
+        use std::sync::Mutex;
+
+        let size = shape.iter().product();
         let data: Vec<f32> = (0..size)
             .into_par_iter()
             .map_init(
-                || ChaCha8Rng::from_seed(rand::thread_rng().gen()),
-                |rng, _| rng.gen_range(0.0..1.0),
+                || Mutex::new(ChaCha8Rng::from_entropy()),
+                |rng, _| {
+                    let rng = rng.get_mut().unwrap();
+                    rng.gen_range(0.0..1.0)
+                },
             )
             .collect();
-        Tensor::from_vec(data, shape, device)
+
+        Self::from_vec(data, shape, device)
     }
 
     fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSimdPar::arange");
-        let size = (end - start).abs() as usize;
+        let size = (end - start).abs().ceil() as usize;
+        let step = if end >= start { 1.0 } else { -1.0 };
+
         let data: Vec<f32> = (0..size)
             .into_par_iter()
-            .map(|i| start + i as f32)
+            .map(|i| start + (i as f32) * step)
             .collect();
-        Tensor::from_vec(data, &[size], device)
+
+        Self::from_vec(data, &[size], device)
+    }
+    
+    fn zeros(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::zeros");
+        let size: usize = shape.iter().product();
+        let data = vec![0.0; size];
+        Self::from_vec(data, shape, device)
+    }
+    
+    fn ones(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::ones");
+        let size: usize = shape.iter().product();
+        let data = vec![1.0; size];
+        Self::from_vec(data, shape, device)
+    }
+    
+    fn identity(size: usize, device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::identity");
+        let len = size * size;
+        let mut data = vec![0.0; len];
+        
+        // Parallelize setting the diagonal elements
+        data.par_chunks_mut(size).enumerate().for_each(|(i, row)| {
+            row[i] = 1.0;
+        });
+        
+        Self::from_vec(data, &[size, size], device)
+    }
+    
+    fn from_vec(data: Vec<f32>, shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::from_vec");
+        let shape_obj = crate::tensor::Shape::new(shape);
+        
+        // Validate that the data length matches the shape
+        if data.len() != shape_obj.len() {
+            return Err(format!(
+                "Data length {} does not match shape {:?} (expected {})",
+                data.len(),
+                shape_obj.dims(),
+                shape_obj.len()
+            ));
+        }
+        
+        Ok(Tensor {
+            data: std::sync::Arc::new(data),
+            shape: shape_obj,
+            device,
+            dtype: crate::tensor::DType::F32,
+        })
     }
 }
 
-// Helper function for parallel arg reduction operations
 fn arg_reduce_axis<F>(tensor: &Tensor, axis: Option<usize>, compare: F) -> Result<Tensor, String>
 where
     F: Fn((usize, f32), (usize, f32)) -> bool + Send + Sync,

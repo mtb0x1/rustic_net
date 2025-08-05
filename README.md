@@ -2,6 +2,8 @@
 
 **🚧 Experimental Machine Learning Framework 🚧**
 
+Crate documentation: [rustic_net](https://mtb0x1.github.io/rustic_net/rustic_net/index.html)
+
 ## ⚠️ Disclaimer
 This project is intentionally experimental and vibe coded (with variety of tools and models). It's not intended for production use. The goal is to explore, play, and push boundaries within machine learning and artificial intelligence frameworks.
 

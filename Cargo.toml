@@ -9,7 +9,7 @@ license-file = "LICENSE"
 default = []
 parallel = ["dep:rayon", "dep:rand_chacha", "dep:lazy_static"]
 simd = []
-simd_and_parallel = ["simd", "parallel"]
+simd_and_parallel = ["dep:rayon", "dep:rand_chacha", "dep:lazy_static"]
 cuda = []
 webgpu = []
 
