@@ -145,7 +145,11 @@ fn main() {
     // Dot product of two vectors
     let k = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], device.clone()).unwrap();
     let l = Tensor::from_vec(vec![4.0, 5.0, 6.0], &[3], device).unwrap();
-    let dot = k.matmul(&l.reshape(&[3, 1]).unwrap()).unwrap();
+    let dot = k
+        .reshape(&[1, 3])
+        .unwrap()
+        .matmul(&l.reshape(&[3, 1]).unwrap())
+        .unwrap();
     println!("\nDot product of [1,2,3] and [4,5,6]: {}", dot.to_vec()[0]);
 
     println!("\n=== ReLU Activation ===");

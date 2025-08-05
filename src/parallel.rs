@@ -84,7 +84,7 @@ pub fn recommended_chunk_size(len: usize) -> usize {
     if num_threads == 0 {
         return len; // Avoid division by zero if something goes wrong
     }
-    (len + num_threads - 1) / num_threads // Equivalent to ceiling division
+    len.div_ceil(num_threads) // Equivalent to ceiling division
 }
 
 #[cfg(test)]

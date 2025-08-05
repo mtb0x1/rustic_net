@@ -3,8 +3,6 @@
 //! This module provides a parallel implementation of all tensor operations
 //! that runs on the CPU using Rayon for parallelization.
 
-#![cfg(feature = "parallel")]
-
 use super::traits::*;
 use crate::tensor::Tensor;
 use crate::trace_fn;
@@ -138,12 +136,8 @@ impl MatOps for CpuParallel {
             .par_chunks_mut(n)
             .enumerate()
             .for_each(|(i, row)| {
-                for j in 0..n {
-                    let mut sum = 0.0;
-                    for l in 0..k {
-                        sum += a.data[i * k + l] * b.data[l * n + j];
-                    }
-                    row[j] = sum;
+                for (j, row_val) in row.iter_mut().enumerate() {
+                    *row_val = (0..k).map(|l| a.data[i * k + l] * b.data[l * n + j]).sum();
                 }
             });
 
@@ -206,11 +200,7 @@ where
 {
     match axis {
         None => {
-            let result = tensor
-                .data
-                .par_iter()
-                .cloned()
-                .reduce(|| init, |a, b| reduce_op(a, b));
+            let result = tensor.data.par_iter().cloned().reduce(|| init, reduce_op);
             Ok(Tensor::from_vec(vec![result], &[1], tensor.device).unwrap())
         }
         Some(axis) => {
@@ -236,13 +226,14 @@ where
                 .par_chunks_mut(after_dim_size)
                 .enumerate()
                 .for_each(|(i, chunk)| {
-                    for k in 0..after_dim_size {
-                        let mut acc = init;
-                        for j in 0..inner_dim_size {
-                            let idx = i * inner_dim_size * after_dim_size + j * after_dim_size + k;
-                            acc = reduce_op(acc, tensor.data[idx]);
-                        }
-                        chunk[k] = acc;
+                    for (k, chunk_val) in chunk.iter_mut().enumerate() {
+                        *chunk_val = (0..inner_dim_size)
+                            .map(|j| {
+                                let idx =
+                                    i * inner_dim_size * after_dim_size + j * after_dim_size + k;
+                                tensor.data[idx]
+                            })
+                            .fold(init, &reduce_op);
                     }
                 });
             Ok(Tensor::from_vec(result_data, &output_shape, tensor.device).unwrap())
@@ -286,18 +277,16 @@ where
                 .par_chunks_mut(after_dim_size)
                 .enumerate()
                 .for_each(|(i, chunk)| {
-                    for k in 0..after_dim_size {
-                        let mut best_idx = 0;
-                        let mut best_val = f32::NAN;
-                        for j in 0..inner_dim_size {
-                            let idx = i * inner_dim_size * after_dim_size + j * after_dim_size + k;
-                            let val = tensor.data[idx];
-                            if best_val.is_nan() || compare((j, val), (best_idx, best_val)) {
-                                best_idx = j;
-                                best_val = val;
-                            }
-                        }
-                        chunk[k] = best_idx as f32;
+                    for (k, chunk_val) in chunk.iter_mut().enumerate() {
+                        let (best_idx, _) = (0..inner_dim_size)
+                            .map(|j| {
+                                let idx =
+                                    i * inner_dim_size * after_dim_size + j * after_dim_size + k;
+                                (j, tensor.data[idx])
+                            })
+                            .reduce(|a, b| if a.1.is_nan() || compare(b, a) { b } else { a })
+                            .unwrap(); // This should not panic as inner_dim_size > 0
+                        *chunk_val = best_idx as f32;
                     }
                 });
             Ok(Tensor::from_vec(result_data, &output_shape, tensor.device).unwrap())

@@ -71,7 +71,7 @@ impl TryFrom<&str> for DType {
         debug!("Attempting to convert string '{}' to DType", value);
         match value {
             "f32" => Ok(DType::F32),
-            _ => Err(format!("Unsupported data type: {}", value)),
+            _ => Err(format!("Unsupported data type: {value}")),
         }
     }
 }
@@ -472,7 +472,7 @@ impl Tensor {
                     dtype: self.dtype,
                 })
             }
-            _ => Err(format!("Device not yet supported: {:?}", device)),
+            _ => Err(format!("Device not yet supported: {device:?}")),
         }
     }
 }
