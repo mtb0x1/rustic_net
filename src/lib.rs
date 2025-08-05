@@ -1,28 +1,36 @@
 //! # Rustic Net
 //!
 //! A high-performance, ergonomic, and extensible Machine Learning Accelerator (MLA) framework in Rust.
+//! Built for both research and production use with a focus on performance and developer experience.
 //!
-//! ## Features
-//! - **Tensor Operations**: Multi-dimensional array operations with CPU and GPU support
-//! - **Device Management**: Seamless tensor movement between different compute devices
-//! - **No External Dependencies**: Core tensor operations implemented in pure Rust
-//! - **FFI Compatible**: Designed for easy integration with other languages
-//! - **Parallel Processing**: Automatic CPU parallelization with configurable thread pool
+//! ## Key Features
 //!
-//! ## Example
+//! - **Tensor Operations**: Efficient multi-dimensional array operations
+//! - **Cross-Device Support**: Seamless CPU and GPU execution
+//! - **Zero-Cost Abstractions**: Leverages Rust's type system for optimal performance
+//! - **Thread-Safe**: Designed for concurrent execution
+//! - **Minimal Dependencies**: Core functionality with minimal external dependencies
+//! - **FFI Ready**: Easy integration with other languages
+//!
+//! ## Quick Start
 //! ```rust
 //! use rustic_net::tensor::{Tensor, Device};
+//! use rustic_net::RusticNetInitTracingInit;
 //!
-//! // Create a tensor on CPU
-//! let t1 = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::Cpu(None)).unwrap();
+//! // Initialize logging
+//! RusticNetInitTracingInit();
 //!
-//! // Perform operations
-//! let t2 = t1.relu().unwrap();
-//!
-//! // Convert to vector
-//! let result = t2.to_vec();
-//! assert_eq!(result, vec![1.0, 2.0, 3.0]);
+//! // Create and manipulate tensors
+//! let t1 = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default())?;
+//! let t2 = t1.relu()?;
+//! assert_eq!(t2.to_vec(), vec![1.0, 2.0, 3.0]);
+//! # Ok::<(), String>(())
 //! ```
+//!
+//! ## Feature Flags
+//! - `parallel`: Enables multi-threaded execution (enabled by default)
+//! - `cuda`: Enables CUDA support (requires CUDA toolkit)
+//! - `wasm`: Enables WebAssembly support
 
 #[cfg(feature = "parallel")]
 pub mod parallel;

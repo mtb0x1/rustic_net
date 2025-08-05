@@ -1,6 +1,14 @@
-//! # Tensor Module
+//! # Tensor Core
 //!
-//! This module provides the core tensor type and operations for the Rustic Net library.
+//! Core tensor type and operations for Rustic Net, providing efficient
+//! multi-dimensional array operations with CPU and GPU support.
+//!
+//! ## Key Features
+//! - N-dimensional tensor operations
+//! - Automatic differentiation
+//! - Device-agnostic API (CPU/GPU)
+//! - Memory-efficient views and in-place operations
+//! - Broadcasting and strided operations
 
 use crate::trace_fn;
 use std::fmt;
@@ -24,7 +32,10 @@ use backends::cpu_seq::CpuSequential;
 #[cfg(feature = "parallel")]
 pub use crate::parallel;
 
-/// Represents the device where tensor data is stored
+/// Compute device for tensor storage and operations.
+///
+/// Tensors can be allocated on different devices, with operations
+/// automatically dispatched to the appropriate backend.
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Device {
     /// CPU device with optional device ID (useful for multi-CPU systems)
@@ -44,7 +55,10 @@ impl Default for Device {
     }
 }
 
-/// Represents the data type of tensor elements
+/// Numeric type of tensor elements.
+///
+/// Currently supports 32-bit floating point (f32).
+/// Future versions may add support for other numeric types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DType {
     /// 32-bit floating point
@@ -86,7 +100,10 @@ impl TryFrom<DType> for &str {
     }
 }
 
-/// Represents a multi-dimensional array (tensor)
+/// Multi-dimensional array (tensor) for numerical computing.
+///
+/// The core data structure in Rustic Net, supporting a variety of
+/// mathematical operations and linear algebra functions.
 #[derive(Clone)]
 pub struct Tensor {
     /// The underlying data buffer

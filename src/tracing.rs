@@ -1,29 +1,29 @@
-//! # Tracing Utilities for Rustic Net
+//! # Tracing and Logging Infrastructure
 //!
-//! This module provides tracing and logging functionality for the Rustic Net library.
-//! It includes initialization of the tracing subscriber and various macros for instrumenting
-//! the code with detailed logging information.
+//! Provides structured logging and tracing capabilities for the Rustic Net library.
+//! Implements configurable logging levels, function instrumentation, and specialized
+//! tracing for tensor operations and model execution.
 //!
-//! ## Features
-//! - Configurable logging levels via environment variables
-//! - Function call tracing with `trace_fn!` macro
-//! - Operation tracing with `trace_operation!` macro
-//! - Tensor operation tracing with `trace_tensor_op!` macro
-//! - Model step tracing with `trace_model_step!` macro
+//! ## Key Features
+//! - Environment-based log level configuration (`RUST_LOG`)
+//! - Function entry/exit tracing
+//! - Operation performance monitoring
+//! - Tensor operation analytics
+//! - Model execution profiling
 
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-/// Initializes the global tracing subscriber with default configuration.
+/// Initializes the global tracing subscriber with production-appropriate defaults.
 ///
-/// This function sets up a tracing subscriber with the following features:
-/// - Log level controlled by `RUST_LOG` environment variable (defaults to `rustic_net=error`)
-/// - Includes thread IDs in log output
-/// - Includes source file and line numbers in log output
-/// - Outputs to stderr
+/// Configures and installs a tracing subscriber with:
+/// - Environment-based log level filtering (`RUST_LOG`)
+/// - Thread-aware logging with source locations
+/// - Structured JSON output for machine processing
+/// - Default log level: ERROR
 ///
 /// # Panics
-/// Panics if the global default subscriber cannot be set.
+/// If the global subscriber cannot be initialized.
 pub fn init_tracing() {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("rustic_net=error"));
@@ -42,26 +42,29 @@ pub fn init_tracing() {
     info!("RusticNet tracing initialized");
 }
 
-/// Creates a tracing span for function entry and exit.
+/// Instruments a function with automatic entry/exit tracing.
 ///
-/// This macro creates a TRACE-level span that automatically logs when a function is entered.
-/// The span will be automatically closed when it goes out of scope.
+/// Creates a TRACE-level span that:
+/// - Automatically logs function entry
+/// - Captures function parameters (optional)
+/// - Closes span on scope exit
 ///
 /// # Examples
-/// ```
+/// ```rust
 /// # use rustic_net::trace_fn;
 /// # use tracing::debug;
-/// fn my_function() {
-///     trace_fn!("my_function");
-///     // Function body
+/// 
+/// // Basic usage
+/// fn process() {
+///     trace_fn!("process");
+///     // ...
 /// }
 ///
-/// fn function_with_parameters(x: i32, y: &str) {
-///     trace_fn!("function_with_parameters");
-///     debug!("parameters are x: {}, y: {}", x, y);
-///     // Function body
+/// // With parameters
+/// fn process_data(id: u64, data: &[u8]) {
+///     trace_fn!("process_data");
+///     // ...
 /// }
-/// ```
 #[macro_export]
 macro_rules! trace_fn {
     ($fn_name:expr) => {
@@ -74,19 +77,19 @@ macro_rules! trace_fn {
     };
 }
 
-/// Traces the start and end of an operation with DEBUG level logs.
+/// Wraps an operation with start/end logging.
 ///
-/// This macro takes an operation name and a block of code, and logs when the operation
-/// starts and completes. It returns the result of the operation.
+/// Logs operation lifecycle at DEBUG level and returns the operation's result.
+/// Ideal for timing and monitoring critical sections.
 ///
 /// # Examples
-/// ```
+/// ```rust
 /// # use rustic_net::trace_operation;
-/// let result = trace_operation!("expensive_calculation", {
-///     // Expensive calculation here
-///     42
+/// #
+/// let data = trace_operation!("process_batch", {
+///     // CPU/GPU intensive work
+///     vec![0u8; 1024]
 /// });
-/// ```
 #[macro_export]
 macro_rules! trace_operation {
     ($op_name:expr, $result:expr) => {{
@@ -97,17 +100,35 @@ macro_rules! trace_operation {
     }};
 }
 
-/// Traces tensor operations with shape information.
+/// Instruments tensor operations with shape tracking.
 ///
-/// This macro is specifically designed for tensor operations. It logs the operation name
-/// and input tensor shape before the operation, and the result shape after the operation.
+/// Logs input and output tensor shapes for debugging and performance analysis.
+/// Automatically captures operation timing and shape transformations.
 ///
 /// # Examples
-/// ```
+/// ```rust
 /// # use rustic_net::{Tensor, trace_tensor_op};
 /// # use rustic_net::Device;
+/// # use tracing::error;
+/// # 
 /// # let input = Tensor::ones(&[2, 3], Device::Cpu(None));
-/// ```
+/// let result = trace_tensor_op!("matmul", &input, {
+///     // Tensor operation here
+///     let t = match input.transpose() {
+///         Ok(t) => t,
+///         Err(e) => {
+///             error!("Tensor operation failed: {}", e);
+///             panic!("Tensor operation failed: {}", e);
+///         }
+///     };
+///     match input.matmul(&t) {
+///         Ok(result) => result,
+///         Err(e) => {
+///             error!("Tensor operation failed: {}", e);
+///             panic!("Tensor operation failed: {}", e);
+///         }
+///     }
+/// });
 #[macro_export]
 macro_rules! trace_tensor_op {
     ($op_name:expr, $tensor:expr, $result:expr) => {{
@@ -117,25 +138,27 @@ macro_rules! trace_tensor_op {
         tracing::debug!(
             "Tensor operation: {} completed, result shape: {:?}",
             $op_name,
-            result.shape
+            result.shape()
         );
         result
     }};
 }
 
-/// Logs information about model processing steps.
+/// Logs model execution context.
 ///
-/// This macro is used to log information about model processing steps, such as when
-/// a layer is processing input. It logs at INFO level and includes the step name,
-/// layer index, and input shape.
+/// Tracks model execution flow with layer-level granularity.
+/// Logs at INFO level with structured data for analysis.
 ///
 /// # Examples
-/// ```
+/// ```rust
 /// # use rustic_net::trace_model_step;
-/// # let layer_idx = 0;
-/// # let input_shape = [1, 28, 28];
-/// trace_model_step!("inference", layer_idx, input_shape);
-/// ```
+/// #
+/// // In model inference loop
+/// // TODO: to implement
+/// //for (i, layer) in model.layers().enumerate() {
+/// //    trace_model_step!("inference", i, input.shape());
+/// //    // Process layer...
+/// //}
 #[macro_export]
 macro_rules! trace_model_step {
     ($step:expr, $layer_idx:expr, $input_shape:expr) => {

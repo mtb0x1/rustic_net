@@ -1,29 +1,39 @@
-//! Parallel computation utilities for Rustic Net
+//! # Parallel Computation Utilities
 //!
-//! This module provides configuration and utilities for parallel execution
-//! using the Rayon thread pool.
+//! Provides thread pool management and parallel execution primitives for Rustic Net.
+//! Leverages Rayon for efficient work-stealing parallelism with automatic load balancing.
+//!
+//! ## Features
+//! - Automatic thread pool configuration
+//! - Environment variable overrides
+//! - Optimal default thread count (80% of available cores)
+//! - Thread-safe initialization
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 use std::thread::available_parallelism;
 use tracing::{debug, warn};
 
-// Environment variable for overriding the thread count
+/// Environment variable for overriding the default thread count
 const THREAD_ENV_VAR: &str = "RUSTIC_NET_NUM_THREADS";
 
-// Global flag to track if we've already initialized the thread pool
+/// Global flag to track thread pool initialization state
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
+/// Synchronization primitive for thread-safe one-time initialization
 static INIT: Once = Once::new();
 
 use {rayon, std::env};
 
-/// Initializes the global thread pool with the optimal number of threads.
+/// Initializes the global thread pool with optimal settings.
 ///
-/// By default, uses 80% of the available CPU cores (minimum 1).
-/// Can be overridden by setting the `RUSTIC_NET_NUM_THREADS` environment variable.
+/// Configuration:
+/// - Uses 80% of available CPU cores by default (minimum 1)
+/// - Respects `RUSTIC_NET_NUM_THREADS` environment variable
+/// - Thread-safe and idempotent (safe to call multiple times)
 ///
-/// This function can be called multiple times; it will only initialize the pool once.
+/// # Panics
+/// If the global thread pool cannot be initialized.
 pub fn init_thread_pool() {
     INIT.call_once(|| {
         // Get the number of available CPU cores
@@ -70,15 +80,18 @@ pub fn init_thread_pool() {
     });
 }
 
-/// Returns the current number of threads in the global thread pool.
-/// If the thread pool hasn't been initialized yet, it will be initialized with default settings.
+/// Returns the current thread pool size.
+///
+/// Initializes the thread pool with default settings if not already initialized.
 pub fn current_num_threads() -> usize {
     init_thread_pool();
     rayon::current_num_threads()
 }
 
-/// Returns the recommended chunk size for parallel operations
-/// based on the number of threads available.
+/// Calculates optimal chunk size for parallel operations.
+///
+/// Distributes work evenly across available threads to minimize
+/// scheduling overhead and maximize cache efficiency.
 pub fn recommended_chunk_size(len: usize) -> usize {
     let num_threads = current_num_threads();
     if num_threads == 0 {

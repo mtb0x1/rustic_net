@@ -1,14 +1,23 @@
-//! Sequential CPU backend implementation
+//! # Sequential CPU Backend
 //!
-//! This module provides a sequential implementation of all tensor operations
-//! that runs on the CPU without any parallelization.
+//! A single-threaded CPU implementation of all tensor operations.
+//! This backend is used when parallel execution is not available or desired.
+//!
+//! ## Features
+//! - Pure Rust implementation with no external dependencies
+//! - Deterministic execution
+//! - Lower memory overhead than parallel version
+//! - Better for small tensors due to lack of threading overhead
 
 use super::traits::*;
 use crate::tensor::Tensor;
 use crate::trace_fn;
 use std::sync::Arc;
 
-/// Sequential CPU backend
+/// Marker type for the sequential CPU backend.
+///
+/// Implements all tensor operation traits using a single-threaded approach.
+/// This is the fallback backend when parallel execution is not available.
 pub struct CpuSequential;
 
 impl UnaryOps for CpuSequential {

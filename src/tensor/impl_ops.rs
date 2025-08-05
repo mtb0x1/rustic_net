@@ -1,13 +1,22 @@
-//! Implementations of scalar operations for Tensor
+//! # Tensor Operations Implementation
 //!
-//! This module contains implementations of basic arithmetic operations between tensors and scalars.
+//! Implements core arithmetic operations for tensors, including:
+//! - Element-wise arithmetic with scalars (+, -, *, /)
+//! - In-place operations (+=, -=, *=, /=)
+//! - Unary negation (-)
+//! - Automatic parallelization when the `parallel` feature is enabled
+//!
+//! All operations maintain the original tensor's shape and device placement.
 
 use super::Tensor;
 use std::ops::{Add, Div, Mul, Sub};
 use std::sync::Arc;
 use tracing::debug;
 
-// Helper macro to implement scalar operations
+/// Implements element-wise operations between a tensor and a scalar.
+///
+/// Generates both consuming and borrowing variants of the operation.
+/// When the `parallel` feature is enabled, operations are automatically parallelized.
 macro_rules! impl_scalar_op {
     ($trait:ident, $method:ident, $op:tt) => {
         impl $trait<f32> for Tensor {
@@ -53,14 +62,17 @@ macro_rules! impl_scalar_op {
     };
 }
 
-// Implement Add, Sub, Mul, Div for Tensor + f32
+// Implement standard arithmetic operations for Tensor and f32
+// These enable expressions like: tensor + 1.0, tensor * 2.0, etc.
 impl_scalar_op!(Add, add, +);
 impl_scalar_op!(Sub, sub, -);
 impl_scalar_op!(Mul, mul, *);
 impl_scalar_op!(Div, div, /);
 
-// Implement reverse operations (f32 + Tensor, etc.)
-
+/// Implements reverse operations between a scalar and tensor.
+///
+/// Enables expressions like: 1.0 + tensor, 2.0 * tensor, etc.
+/// Maintains the same performance characteristics as the direct operations.
 macro_rules! impl_reverse_scalar_op {
     ($trait:ident, $method:ident, $op:tt) => {
         impl $trait<&Tensor> for f32 {
@@ -106,13 +118,14 @@ macro_rules! impl_reverse_scalar_op {
     };
 }
 
-// Implement reverse operations for f32 + Tensor, etc.
+// Implement reverse arithmetic operations for f32 and Tensor
+// These enable expressions like: 1.0 + tensor, 2.0 * tensor, etc.
 impl_reverse_scalar_op!(Add, add, +);
 impl_reverse_scalar_op!(Sub, sub, -);
 impl_reverse_scalar_op!(Mul, mul, *);
 impl_reverse_scalar_op!(Div, div, /);
 
-// Implement in-place operations
+// In-place operations modify the tensor directly without creating a new allocation.
 
 impl std::ops::AddAssign<f32> for Tensor {
     fn add_assign(&mut self, rhs: f32) {
@@ -138,7 +151,7 @@ impl std::ops::DivAssign<f32> for Tensor {
     }
 }
 
-// Implement negation
+// Unary negation creates a new tensor with all elements negated.
 
 impl std::ops::Neg for Tensor {
     type Output = Tensor;

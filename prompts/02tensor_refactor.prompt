@@ -1,0 +1,71 @@
+# Tensor Operations Refactoring Prompt
+
+## Objective
+Refactor the tensor operations in the Rust-based neural network library to improve performance, code quality, and maintainability. The focus should be on the CPU parallel backend implementation.
+
+## Key Areas for Refactoring
+
+### 1. Parallel Processing Optimization
+- Replace sequential loops with parallel iterators using Rayon
+- Implement proper chunking for better workload distribution
+- Optimize memory access patterns for better cache utilization
+
+### 2. Code Quality Improvements
+- Remove unused dependencies (bitflags, r-efi)
+- Update dependencies to more recent versions where possible
+- Fix clippy lints and warnings
+- Improve code formatting and consistency
+
+### 3. Tensor Operations
+- Optimize matrix multiplication implementation
+- Improve reduction operations (sum, mean, etc.)
+- Implement proper broadcasting for element-wise operations
+- Add proper error handling and edge cases
+
+### 4. Performance Considerations
+- Minimize memory allocations
+- Use efficient data structures
+- Implement proper bounds checking
+- Optimize for both small and large tensors
+
+## Specific Implementation Details
+
+### Matrix Multiplication
+- [ ] Implement blocked matrix multiplication for better cache locality
+- [ ] Add support for different matrix storage formats (row-major, column-major)
+- [ ] Optimize for different matrix shapes (tall-skinny, short-wide, square)
+
+### Element-wise Operations
+- [ ] Implement parallel versions of all element-wise operations
+- [ ] Add proper handling of NaN and infinity values
+- [ ] Optimize for in-place operations where possible
+
+### Reduction Operations
+- [ ] Implement parallel reduction for sum, mean, min, max
+- [ ] Add support for reduction along specific axes
+- [ ] Optimize for different tensor shapes and reduction patterns
+
+## Testing Requirements
+- Add comprehensive unit tests for all operations
+- Include edge cases and error conditions
+- Benchmark performance before and after changes
+- Ensure numerical stability
+
+## Code Style
+- Follow Rust best practices
+- Use meaningful variable names
+- Add documentation for public APIs
+- Keep functions small and focused
+
+## Performance Targets
+- At least 2x speedup for common operations
+- Reduced memory usage
+- Better scaling with number of CPU cores
+- Lower latency for small tensors
+
+## Deliverables
+1. Refactored tensor operations code
+2. Updated documentation
+3. Performance benchmarks
+4. Unit tests
+5. Examples of usage

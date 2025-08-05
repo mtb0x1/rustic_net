@@ -1,7 +1,13 @@
-//! Parallel CPU backend implementation
+//! # Parallel CPU Backend
 //!
-//! This module provides a parallel implementation of all tensor operations
-//! that runs on the CPU using Rayon for parallelization.
+//! A multi-threaded CPU implementation of tensor operations using Rayon for parallel execution.
+//! Automatically scales across available CPU cores for improved performance on large tensors.
+//!
+//! ## Features
+//! - Automatic work-stealing thread pool for load balancing
+//! - Data parallelism for element-wise operations
+//! - Chunked processing for cache efficiency
+//! - Fallback to sequential execution for small tensors
 
 use super::traits::*;
 use crate::tensor::Tensor;
@@ -9,7 +15,11 @@ use crate::trace_fn;
 use rayon::prelude::*;
 use std::sync::Arc;
 
-/// Parallel CPU backend
+/// Marker type for the parallel CPU backend.
+///
+/// Implements all tensor operation traits using Rayon's parallel iterators.
+/// Automatically selected when the `parallel` feature is enabled and the tensor
+/// size exceeds the parallelization threshold.
 pub struct CpuParallel;
 
 impl UnaryOps for CpuParallel {
