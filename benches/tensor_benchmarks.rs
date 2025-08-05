@@ -51,13 +51,13 @@ fn tensor_ops_benchmark(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("add_tensors", size), &size, |b, _| {
             let t1 = t1.clone();
             let t2 = t2.clone();
-            b.iter(|| std::hint::black_box(t1.add_tensor(&t2).unwrap()))
+            b.iter(|| std::hint::black_box(t1.add(&t2).unwrap()))
         });
 
         group.bench_with_input(BenchmarkId::new("multiply_tensors", size), &size, |b, _| {
             let t1 = t1.clone();
             let t2 = t2.clone();
-            b.iter(|| std::hint::black_box(t1.mul_tensor(&t2).unwrap()))
+            b.iter(|| std::hint::black_box(t1.mul(&t2).unwrap()))
         });
 
         // Reduction operations
@@ -125,6 +125,38 @@ fn parallel_scaling_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "simd")]
+fn simd_comparison_benchmark(c: &mut Criterion) {
+    use rustic_net::tensor::backends::cpu_simd::CpuSimd;
+    let size = 1_000_000;
+    let device = Device::default();
+    let t = Tensor::ones(&[size], device.clone()) - 0.5;
+
+    let mut group = c.benchmark_group("SIMD Comparison");
+    group.measurement_time(Duration::from_secs(5));
+    group.throughput(Throughput::Elements(size as u64));
+
+    group.bench_function("relu_seq", |b| {
+        b.iter(|| {
+            let _ = rustic_net::tensor::backends::cpu_seq::CpuSequential::relu(&t);
+        })
+    });
+
+    group.bench_function("relu_par", |b| {
+        b.iter(|| {
+            let _ = rustic_net::tensor::backends::cpu_par::CpuParallel::relu(&t);
+        })
+    });
+
+    group.bench_function("relu_simd", |b| {
+        b.iter(|| {
+            let _ = CpuSimd::relu(&t);
+        })
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     name = benches;
     config = Criterion::default()
@@ -132,4 +164,18 @@ criterion_group!(
         .warm_up_time(Duration::from_secs(1));
     targets = tensor_creation_benchmark, tensor_ops_benchmark, matrix_ops_benchmark, parallel_scaling_benchmark
 );
+
+#[cfg(feature = "simd")]
+criterion_group!(
+    name = simd_benches;
+    config = Criterion::default()
+        .sample_size(10)
+        .warm_up_time(Duration::from_secs(1));
+    targets = simd_comparison_benchmark
+);
+
+#[cfg(not(feature = "simd"))]
+criterion_main!(benches);
+#[cfg(feature = "simd")]
+criterion_main!(benches, simd_benches);
 criterion_main!(benches);

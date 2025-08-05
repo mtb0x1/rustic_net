@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 //! # Rustic Net
 //!
 //! A high-performance, ergonomic, and extensible Machine Learning Accelerator (MLA) framework in Rust.

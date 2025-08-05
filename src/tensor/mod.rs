@@ -26,8 +26,10 @@ pub use tracing::debug;
 
 #[cfg(feature = "parallel")]
 use backends::cpu_par::CpuParallel;
-#[cfg(not(feature = "parallel"))]
+#[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
 use backends::cpu_seq::CpuSequential;
+#[cfg(all(not(feature = "parallel"), feature = "simd"))]
+use backends::cpu_simd::CpuSimd;
 
 #[cfg(feature = "parallel")]
 pub use crate::parallel;
@@ -199,7 +201,11 @@ impl Tensor {
         {
             CpuParallel::relu(self)
         }
-        #[cfg(not(feature = "parallel"))]
+        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
+        {
+            CpuSimd::relu(self)
+        }
+        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
         {
             CpuSequential::relu(self)
         }
@@ -212,7 +218,11 @@ impl Tensor {
         {
             CpuParallel::add(self, other)
         }
-        #[cfg(not(feature = "parallel"))]
+        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
+        {
+            CpuSimd::add(self, other)
+        }
+        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
         {
             CpuSequential::add(self, other)
         }
@@ -225,7 +235,11 @@ impl Tensor {
         {
             CpuParallel::sub(self, other)
         }
-        #[cfg(not(feature = "parallel"))]
+        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
+        {
+            CpuSimd::sub(self, other)
+        }
+        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
         {
             CpuSequential::sub(self, other)
         }
@@ -238,7 +252,11 @@ impl Tensor {
         {
             CpuParallel::mul(self, other)
         }
-        #[cfg(not(feature = "parallel"))]
+        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
+        {
+            CpuSimd::mul(self, other)
+        }
+        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
         {
             CpuSequential::mul(self, other)
         }
@@ -251,7 +269,11 @@ impl Tensor {
         {
             CpuParallel::div(self, other)
         }
-        #[cfg(not(feature = "parallel"))]
+        #[cfg(all(not(feature = "parallel"), feature = "simd"))]
+        {
+            CpuSimd::div(self, other)
+        }
+        #[cfg(all(not(feature = "parallel"), not(feature = "simd")))]
         {
             CpuSequential::div(self, other)
         }

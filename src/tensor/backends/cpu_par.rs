@@ -22,14 +22,30 @@ use std::sync::Arc;
 /// size exceeds the parallelization threshold.
 pub struct CpuParallel;
 
+use std::simd::{cmp::SimdPartialOrd, f32x8};
+
 impl UnaryOps for CpuParallel {
     fn relu(tensor: &Tensor) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::relu");
-        let data = tensor
-            .data
-            .par_iter()
-            .map(|&x| if x > 0.0 { x } else { 0.0 })
-            .collect();
+        let mut data = tensor.data.to_vec();
+
+        #[cfg(feature = "simd_and_parallel")]
+        {
+            data.par_chunks_mut(8).for_each(|chunk| {
+                let simd_chunk = f32x8::from_slice(chunk);
+                let mask = simd_chunk.simd_gt(f32x8::splat(0.0));
+                let result = mask.select(simd_chunk, f32x8::splat(0.0));
+                result.copy_to_slice(chunk);
+            });
+        }
+        #[cfg(not(feature = "simd_and_parallel"))]
+        {
+            data = tensor
+                .data
+                .par_iter()
+                .map(|&x| if x > 0.0 { x } else { 0.0 })
+                .collect();
+        }
 
         Ok(Tensor {
             data: Arc::new(data),
@@ -47,12 +63,28 @@ impl BinaryElementwiseOps for CpuParallel {
             return Err("Shapes must match for element-wise addition".to_string());
         }
 
-        let data = a
-            .data
-            .par_iter()
-            .zip(b.data.par_iter())
-            .map(|(&a, &b)| a + b)
-            .collect();
+        let mut data = vec![0.0; a.data.len()];
+        #[cfg(feature = "simd_and_parallel")]
+        {
+            data.par_chunks_mut(8)
+                .zip(a.data.par_chunks(8))
+                .zip(b.data.par_chunks(8))
+                .for_each(|((out_chunk, a_chunk), b_chunk)| {
+                    let simd_a = f32x8::from_slice(a_chunk);
+                    let simd_b = f32x8::from_slice(b_chunk);
+                    let result = simd_a + simd_b;
+                    result.copy_to_slice(out_chunk);
+                });
+        }
+        #[cfg(not(feature = "simd_and_parallel"))]
+        {
+            data = a
+                .data
+                .par_iter()
+                .zip(b.data.par_iter())
+                .map(|(&a, &b)| a + b)
+                .collect();
+        }
 
         Ok(Tensor {
             data: Arc::new(data),
@@ -68,12 +100,28 @@ impl BinaryElementwiseOps for CpuParallel {
             return Err("Shapes must match for element-wise subtraction".to_string());
         }
 
-        let data = a
-            .data
-            .par_iter()
-            .zip(b.data.par_iter())
-            .map(|(&a, &b)| a - b)
-            .collect();
+        let mut data = vec![0.0; a.data.len()];
+        #[cfg(feature = "simd_and_parallel")]
+        {
+            data.par_chunks_mut(8)
+                .zip(a.data.par_chunks(8))
+                .zip(b.data.par_chunks(8))
+                .for_each(|((out_chunk, a_chunk), b_chunk)| {
+                    let simd_a = f32x8::from_slice(a_chunk);
+                    let simd_b = f32x8::from_slice(b_chunk);
+                    let result = simd_a - simd_b;
+                    result.copy_to_slice(out_chunk);
+                });
+        }
+        #[cfg(not(feature = "simd_and_parallel"))]
+        {
+            data = a
+                .data
+                .par_iter()
+                .zip(b.data.par_iter())
+                .map(|(&a, &b)| a - b)
+                .collect();
+        }
 
         Ok(Tensor {
             data: Arc::new(data),
@@ -89,12 +137,28 @@ impl BinaryElementwiseOps for CpuParallel {
             return Err("Shapes must match for element-wise multiplication".to_string());
         }
 
-        let data = a
-            .data
-            .par_iter()
-            .zip(b.data.par_iter())
-            .map(|(&a, &b)| a * b)
-            .collect();
+        let mut data = vec![0.0; a.data.len()];
+        #[cfg(feature = "simd_and_parallel")]
+        {
+            data.par_chunks_mut(8)
+                .zip(a.data.par_chunks(8))
+                .zip(b.data.par_chunks(8))
+                .for_each(|((out_chunk, a_chunk), b_chunk)| {
+                    let simd_a = f32x8::from_slice(a_chunk);
+                    let simd_b = f32x8::from_slice(b_chunk);
+                    let result = simd_a * simd_b;
+                    result.copy_to_slice(out_chunk);
+                });
+        }
+        #[cfg(not(feature = "simd_and_parallel"))]
+        {
+            data = a
+                .data
+                .par_iter()
+                .zip(b.data.par_iter())
+                .map(|(&a, &b)| a * b)
+                .collect();
+        }
 
         Ok(Tensor {
             data: Arc::new(data),
@@ -110,12 +174,28 @@ impl BinaryElementwiseOps for CpuParallel {
             return Err("Shapes must match for element-wise division".to_string());
         }
 
-        let data = a
-            .data
-            .par_iter()
-            .zip(b.data.par_iter())
-            .map(|(&a, &b)| if b == 0.0 { f32::NAN } else { a / b })
-            .collect();
+        let mut data = vec![0.0; a.data.len()];
+        #[cfg(feature = "simd_and_parallel")]
+        {
+            data.par_chunks_mut(8)
+                .zip(a.data.par_chunks(8))
+                .zip(b.data.par_chunks(8))
+                .for_each(|((out_chunk, a_chunk), b_chunk)| {
+                    let simd_a = f32x8::from_slice(a_chunk);
+                    let simd_b = f32x8::from_slice(b_chunk);
+                    let result = simd_a / simd_b;
+                    result.copy_to_slice(out_chunk);
+                });
+        }
+        #[cfg(not(feature = "simd_and_parallel"))]
+        {
+            data = a
+                .data
+                .par_iter()
+                .zip(b.data.par_iter())
+                .map(|(&a, &b)| if b == 0.0 { f32::NAN } else { a / b })
+                .collect();
+        }
 
         Ok(Tensor {
             data: Arc::new(data),

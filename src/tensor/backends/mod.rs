@@ -13,4 +13,6 @@
 #[cfg(feature = "parallel")]
 pub mod cpu_par;
 pub mod cpu_seq;
+#[cfg(feature = "simd")]
+pub mod cpu_simd;
 pub mod traits;

@@ -26,7 +26,8 @@ cargo build
 ```
 
 ## 🧪 Features
-- **Parallel Processing**: Leverage multi-core CPUs for faster tensor operations
+- **Parallel Processing**: Leverage multi-core CPUs for faster tensor operations.
+- **SIMD Acceleration**: Utilizes SIMD instructions for enhanced performance on element-wise operations. **Requires a nightly Rust toolchain.**
 - Experimental neural network implementations
 - Research-focused architecture
 - Cutting-edge (and sometimes unstable) features
