@@ -6,11 +6,11 @@
 #[cfg(feature = "parallel")]
 use rustic_net::parallel::init_thread_pool;
 use rustic_net::tensor::{Device, Tensor};
-use rustic_net::RusticNetInitTracingInit;
+use rustic_net::RusticNetInitTracing;
 use std::time::Instant;
 
 fn main() {
-    RusticNetInitTracingInit();
+    RusticNetInitTracing();
 
     #[cfg(feature = "parallel")]
     init_thread_pool();

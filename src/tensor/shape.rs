@@ -101,7 +101,7 @@ impl Shape {
     /// // A shape with no elements is considered empty
     /// let shape = Shape::new(&[1, 2, 3]);
     /// assert!(!shape.is_empty());
-    /// 
+    ///
     /// // Note: A shape with any dimension of size 0 would be considered empty,
     /// // but Shape::new() panics when given zero dimensions as it's considered invalid
     /// ```

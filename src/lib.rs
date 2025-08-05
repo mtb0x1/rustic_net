@@ -15,10 +15,10 @@
 //! ## Quick Start
 //! ```rust
 //! use rustic_net::tensor::{Tensor, Device};
-//! use rustic_net::RusticNetInitTracingInit;
+//! use rustic_net::RusticNetInitTracing;
 //!
 //! // Initialize logging
-//! RusticNetInitTracingInit();
+//! RusticNetInitTracing();
 //!
 //! // Create and manipulate tensors
 //! let t1 = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default())?;
@@ -41,7 +41,7 @@ pub(crate) mod tracing;
 #[cfg(feature = "parallel")]
 pub use parallel::{current_num_threads, init_thread_pool};
 
-pub use tracing::init_tracing as RusticNetInitTracingInit;
+pub use tracing::init_tracing as RusticNetInitTracing;
 
 /// Re-exports for common types
 pub use tensor::{DType, Device, Shape, Tensor};

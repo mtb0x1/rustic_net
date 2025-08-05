@@ -53,7 +53,7 @@ pub fn init_tracing() {
 /// ```rust
 /// # use rustic_net::trace_fn;
 /// # use tracing::debug;
-/// 
+///
 /// // Basic usage
 /// fn process() {
 ///     trace_fn!("process");
@@ -110,7 +110,7 @@ macro_rules! trace_operation {
 /// # use rustic_net::{Tensor, trace_tensor_op};
 /// # use rustic_net::Device;
 /// # use tracing::error;
-/// # 
+/// #
 /// # let input = Tensor::ones(&[2, 3], Device::Cpu(None));
 /// let result = trace_tensor_op!("matmul", &input, {
 ///     // Tensor operation here

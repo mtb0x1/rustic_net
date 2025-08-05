@@ -1,12 +1,12 @@
 use rustic_net::tensor::{DType, Device, Tensor};
-use rustic_net::RusticNetInitTracingInit;
+use rustic_net::RusticNetInitTracing;
 use std::sync::Once;
 
 static TRACING_INIT: Once = Once::new();
 
 fn setup() {
     TRACING_INIT.call_once(|| {
-        RusticNetInitTracingInit();
+        RusticNetInitTracing();
     });
 }
 
