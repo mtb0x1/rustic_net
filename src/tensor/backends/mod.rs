@@ -47,7 +47,6 @@ pub mod cpu_seq;
 ))]
 pub use cpu_seq::CpuSequential as Cpu;
 
-
 #[cfg(feature = "simd")]
 pub mod cpu_simd;
 
