@@ -31,9 +31,9 @@
 //! ```
 //!
 //! ## Configuration
-//! The number of threads can be controlled via the `RAYON_NUM_THREADS` environment variable:
+//! The number of threads can be controlled via the `RUSTIC_NET_NUM_THREADS` environment variable:
 //! ```bash
-//! RAYON_NUM_THREADS=4 cargo run --release
+//! RUSTIC_NET_NUM_THREADS=4 cargo run --release
 //! ```
 
 use crate::tensor::backends::traits::BinaryElementwiseOps;
@@ -41,11 +41,13 @@ use crate::tensor::backends::traits::CreationOps;
 use crate::tensor::backends::traits::MatOps;
 use crate::tensor::backends::traits::ReductionOps;
 use crate::tensor::backends::traits::ScalarOps;
+use crate::tensor::backends::traits::ShapeOps;
 use crate::tensor::backends::traits::UnaryOps;
-use crate::tensor::Tensor;
+use crate::tensor::{Shape, Tensor};
 use crate::trace_fn;
 use rayon::prelude::*;
 use std::sync::Arc;
+use tracing::debug;
 
 /// Parallel CPU backend implementation for tensor operations.
 ///
@@ -265,13 +267,17 @@ impl MatOps for CpuParallel {
         let k = a.shape()[1];
 
         let mut result_data = vec![0.0; m * n];
+        debug!("m: {}, n: {}, k: {}", m, n, k);
         result_data
             .par_chunks_mut(n)
             .enumerate()
             .for_each(|(i, row)| {
+                //debug!("\ni: {}, row: {:?}", i, row);
                 for (j, row_val) in row.iter_mut().enumerate() {
+                    //debug!("j: {}, row_val: {}", j, row_val);
                     *row_val = (0..k).map(|l| a.data[i * k + l] * b.data[l * n + j]).sum();
                 }
+                //debug!("row: {:?} done\n", i);
             });
 
         Ok(Tensor::from_vec(result_data, &[m, n], a.device).unwrap())
@@ -644,6 +650,78 @@ impl ScalarOps for CpuParallel {
     }
 }
 
+impl ShapeOps for CpuParallel {
+    fn transpose(tensor: &Tensor) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::transpose");
+        let rank = tensor.rank();
+        let axes: Vec<usize> = (0..rank).rev().collect();
+        CpuParallel::transpose_axes(tensor, &axes)
+    }
+
+    fn transpose_axes(tensor: &Tensor, axes: &[usize]) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::transpose_axes");
+        let rank = tensor.rank();
+        if axes.len() != rank {
+            return Err(format!(
+                "Axes length {} does not match tensor rank {}",
+                axes.len(),
+                rank
+            ));
+        }
+
+        // Create new shape and calculate new strides
+        let new_dims: Vec<usize> = axes.iter().map(|&i| tensor.shape()[i]).collect();
+        let new_shape = Shape::new(&new_dims);
+        let new_len = new_shape.len();
+
+        // Pre-allocate the output vector
+        let mut new_data = vec![0.0; new_len];
+
+        // Get strides for both old and new shapes
+        let old_strides = tensor.shape.strides();
+        let new_strides = new_shape.strides();
+
+        // Calculate chunk size based on number of CPU cores
+        let chunk_size = std::cmp::max(1, new_len / (rayon::current_num_threads() * 4));
+
+        // Process data in parallel chunks for better cache locality
+        new_data
+            .par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(chunk_idx, chunk)| {
+                let start_idx = chunk_idx * chunk_size;
+
+                // Process each element in the chunk
+                for (i, val) in chunk.iter_mut().enumerate() {
+                    let idx = start_idx + i;
+                    if idx >= new_len {
+                        break;
+                    } // Handle the last chunk which might be smaller
+
+                    // Calculate the multi-dimensional index in the new shape
+                    let mut old_idx = 0;
+                    let mut remaining = idx;
+
+                    // Convert flat index to multi-dimensional index and then to old index
+                    for (j, &stride) in new_strides.iter().enumerate() {
+                        let dim = remaining / stride;
+                        remaining %= stride;
+                        old_idx += dim * old_strides[axes[j]];
+                    }
+
+                    *val = tensor.data[old_idx];
+                }
+            });
+
+        Ok(Tensor {
+            data: Arc::new(new_data),
+            shape: new_shape,
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+}
+
 impl CreationOps for CpuParallel {
     /// Generates a tensor with random values between 0.0 and 1.0.
     ///
@@ -837,6 +915,31 @@ impl CreationOps for CpuParallel {
 
         Ok(Tensor {
             data: std::sync::Arc::new(data),
+            shape: shape_obj,
+            device,
+            dtype: crate::tensor::DType::F32,
+        })
+    }
+    fn from_slice(
+        data: &[f32],
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
+        trace_fn!("CpuParallel::from_slice");
+        let shape_obj = crate::tensor::Shape::new(shape);
+
+        // Validate that the data length matches the shape
+        if data.len() != shape_obj.len() {
+            return Err(format!(
+                "Data length {} does not match shape {:?} (expected {})",
+                data.len(),
+                shape_obj.dims(),
+                shape_obj.len()
+            ));
+        }
+
+        Ok(Tensor {
+            data: std::sync::Arc::new(data.to_vec()),
             shape: shape_obj,
             device,
             dtype: crate::tensor::DType::F32,

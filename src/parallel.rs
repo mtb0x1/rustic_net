@@ -30,6 +30,7 @@
 //! - For CPU-bound workloads, the default is usually optimal
 //! - Set `RUSTIC_NET_NUM_THREADS=1` to disable parallelism for debugging
 
+use crate::trace_fn;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 use std::thread::available_parallelism;
@@ -79,8 +80,10 @@ use {rayon, std::env};
 /// init_thread_pool();
 /// ```
 pub fn init_thread_pool() {
+    trace_fn!("parallel::init_thread_pool");
     INIT.call_once(|| {
         // Get the number of available CPU cores
+
         let num_cpus = available_parallelism().map(|n| n.get()).unwrap_or(1);
 
         // Calculate default thread count (80% of cores, minimum 1)

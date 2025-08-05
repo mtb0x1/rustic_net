@@ -53,7 +53,7 @@ pub mod impl_ops;
 pub mod shape;
 
 use backends::{
-    traits::{BinaryElementwiseOps, CreationOps, MatOps, ReductionOps, UnaryOps},
+    traits::{BinaryElementwiseOps, CreationOps, MatOps, ReductionOps, ShapeOps, UnaryOps},
     Cpu,
 };
 
@@ -415,55 +415,13 @@ impl Tensor {
     /// To transpose by a specific permutation of axes, use `transpose_axes`.
     pub fn transpose(&self) -> Result<Self, String> {
         trace_fn!("Tensor::transpose");
-        let axes: Vec<usize> = (0..self.rank()).rev().collect();
-        self.transpose_axes(&axes)
+        Cpu::transpose(self)
     }
 
     /// Transposes the tensor according to the given axes permutation.
     pub fn transpose_axes(&self, axes: &[usize]) -> Result<Self, String> {
         trace_fn!("Tensor::transpose_axes");
-        let rank = self.rank();
-        if axes.len() != rank {
-            return Err(format!(
-                "Axes length {} does not match tensor rank {}",
-                axes.len(),
-                rank
-            ));
-        }
-
-        let new_dims: Vec<usize> = axes.iter().map(|&i| self.shape()[i]).collect();
-        let new_shape = Shape::new(&new_dims);
-        let mut new_data = vec![0.0; self.numel()];
-
-        let old_strides = self.shape.strides();
-        let new_strides = new_shape.strides();
-
-        for (i, &val) in self.data.iter().enumerate() {
-            let mut old_indices = vec![0; rank];
-            let mut temp_index = i;
-            for (j, &stride) in old_strides.iter().enumerate() {
-                old_indices[j] = temp_index / stride;
-                temp_index %= stride;
-            }
-
-            let mut new_indices = vec![0; rank];
-            for (j, &axis) in axes.iter().enumerate() {
-                new_indices[j] = old_indices[axis];
-            }
-
-            let mut new_i = 0;
-            for (j, &index) in new_indices.iter().enumerate() {
-                new_i += index * new_strides[j];
-            }
-            new_data[new_i] = val;
-        }
-
-        Ok(Tensor {
-            data: Arc::new(new_data),
-            shape: new_shape,
-            device: self.device,
-            dtype: self.dtype,
-        })
+        Cpu::transpose_axes(self, axes)
     }
 
     /// Adds a new dimension of size 1 at the specified axis.

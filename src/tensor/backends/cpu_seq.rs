@@ -10,7 +10,7 @@
 //! - Better for small tensors due to lack of threading overhead
 
 use super::traits::*;
-use crate::tensor::Tensor;
+use crate::tensor::{Shape, Tensor};
 use crate::trace_fn;
 use std::sync::Arc;
 
@@ -351,6 +351,60 @@ impl ScalarOps for CpuSequential {
     }
 }
 
+impl ShapeOps for CpuSequential {
+    fn transpose(tensor: &Tensor) -> Result<Tensor, String> {
+        trace_fn!("CpuSequential::transpose");
+        let axes: Vec<usize> = (0..tensor.rank()).rev().collect();
+        CpuSequential::transpose_axes(tensor, &axes)
+    }
+
+    fn transpose_axes(tensor: &Tensor, axes: &[usize]) -> Result<Tensor, String> {
+        trace_fn!("CpuSequential::transpose_axes");
+        let rank = tensor.rank();
+        if axes.len() != rank {
+            return Err(format!(
+                "Axes length {} does not match tensor rank {}",
+                axes.len(),
+                rank
+            ));
+        }
+
+        let new_dims: Vec<usize> = axes.iter().map(|&i| tensor.shape()[i]).collect();
+        let new_shape = Shape::new(&new_dims);
+        let mut new_data = vec![0.0; tensor.numel()];
+
+        let old_strides = tensor.shape.strides();
+        let new_strides = new_shape.strides();
+
+        for (i, &val) in tensor.data.iter().enumerate() {
+            let mut old_indices = vec![0; rank];
+            let mut temp_index = i;
+            for (j, &stride) in old_strides.iter().enumerate() {
+                old_indices[j] = temp_index / stride;
+                temp_index %= stride;
+            }
+
+            let mut new_indices = vec![0; rank];
+            for (j, &axis) in axes.iter().enumerate() {
+                new_indices[j] = old_indices[axis];
+            }
+
+            let mut new_i = 0;
+            for (j, &index) in new_indices.iter().enumerate() {
+                new_i += index * new_strides[j];
+            }
+            new_data[new_i] = val;
+        }
+
+        Ok(Tensor {
+            data: Arc::new(new_data),
+            shape: new_shape,
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
+    }
+}
+
 impl CreationOps for CpuSequential {
     fn random(shape: &[usize], device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::random");
@@ -397,21 +451,43 @@ impl CreationOps for CpuSequential {
         device: crate::tensor::Device,
     ) -> Result<Tensor, String> {
         trace_fn!("CpuSequential::from_vec");
-        let shape_obj = crate::tensor::Shape::new(shape);
-
-        // Validate that the data length matches the shape
-        if data.len() != shape_obj.len() {
+        let size: usize = shape.iter().product();
+        if data.len() != size {
             return Err(format!(
                 "Data length {} does not match shape {:?} (expected {})",
                 data.len(),
-                shape_obj.dims(),
-                shape_obj.len()
+                shape,
+                size
             ));
         }
 
         Ok(Tensor {
-            data: std::sync::Arc::new(data),
-            shape: shape_obj,
+            data: Arc::new(data),
+            shape: Shape::new(shape),
+            device,
+            dtype: crate::tensor::DType::F32,
+        })
+    }
+
+    fn from_slice(
+        slice: &[f32],
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
+        trace_fn!("CpuSequential::from_slice");
+        let size: usize = shape.iter().product();
+        if slice.len() != size {
+            return Err(format!(
+                "Slice length {} does not match shape {:?} (expected {})",
+                slice.len(),
+                shape,
+                size
+            ));
+        }
+
+        Ok(Tensor {
+            data: Arc::new(slice.to_vec()),
+            shape: Shape::new(shape),
             device,
             dtype: crate::tensor::DType::F32,
         })

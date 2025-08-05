@@ -17,7 +17,6 @@ webgpu = []
 docsrs = ["dep:rayon", "dep:rand_chacha", "dep:lazy_static"]
 
 [dependencies]
-criterion = { version = "0.7.0", features = ["html_reports"]}
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 rand = "0.8" # Pinned to 0.8 to match rand_chacha
@@ -43,9 +42,5 @@ harness = true
 name = "test_parallel"
 path = "tests/test_parallel.rs"
 harness = true
-
-[[bench]]
-name = "tensor_benchmarks"
-harness = false
 
 

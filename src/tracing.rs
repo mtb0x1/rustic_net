@@ -233,30 +233,3 @@ macro_rules! trace_tensor_op {
         result
     }};
 }
-
-/// Logs model execution context.
-///
-/// Tracks model execution flow with layer-level granularity.
-/// Logs at INFO level with structured data for analysis.
-///
-/// # Examples
-/// ```rust
-/// # use rustic_net::trace_model_step;
-/// #
-/// // In model inference loop
-/// // TODO: to implement
-/// //for (i, layer) in model.layers().enumerate() {
-/// //    trace_model_step!("inference", i, input.shape());
-/// //    // Process layer...
-/// //}
-#[macro_export]
-macro_rules! trace_model_step {
-    ($step:expr, $layer_idx:expr, $input_shape:expr) => {
-        tracing::info!(
-            "Model {}: layer {} processing tensor shape {:?}",
-            $step,
-            $layer_idx,
-            $input_shape
-        );
-    };
-}

@@ -8,6 +8,7 @@
 //! - `BinaryElementwiseOps`: Element-wise operations between two tensors
 //! - `MatOps`: Matrix and linear algebra operations
 //! - `ReductionOps`: Dimensionality reduction operations
+//! - `ShapeOps`: Shape manipulation operations
 
 use crate::tensor::Tensor;
 
@@ -132,7 +133,14 @@ pub trait CreationOps {
         slice: &[f32],
         shape: &[usize],
         device: crate::tensor::Device,
-    ) -> Result<Tensor, String> {
-        Self::from_vec(slice.to_vec(), shape, device)
-    }
+    ) -> Result<Tensor, String>;
+}
+
+/// Defines shape manipulation operations.
+pub trait ShapeOps {
+    /// Transposes the tensor by reversing its dimensions.
+    fn transpose(tensor: &Tensor) -> Result<Tensor, String>;
+
+    /// Transposes the tensor according to the given axes permutation.
+    fn transpose_axes(tensor: &Tensor, axes: &[usize]) -> Result<Tensor, String>;
 }

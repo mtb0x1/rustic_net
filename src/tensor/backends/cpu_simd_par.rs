@@ -10,9 +10,11 @@
 //! - Ideal for large-scale numerical computations on modern CPUs
 
 use super::traits::*;
-use crate::tensor::Tensor;
+use crate::tensor::{Shape, Tensor};
 use crate::trace_fn;
 use rayon::prelude::*;
+use std::simd::num::SimdFloat;
+use std::simd::StdFloat;
 use std::simd::{cmp::SimdPartialOrd, f32x8};
 use std::sync::Arc;
 
@@ -225,25 +227,190 @@ impl MatOps for CpuSimdPar {
             return Err("Matrix multiplication requires 2D tensors".to_string());
         }
 
-        if a.shape()[1] != b.shape()[0] {
-            return Err("Inner dimensions must match for matrix multiplication".to_string());
-        }
-
         let m = a.shape()[0];
         let n = b.shape()[1];
-        let k = a.shape()[1];
+        let k = a.shape()[1]; // Inner dimension
+
+        if k != b.shape()[0] {
+            return Err(format!(
+                "Inner dimensions must match for matrix multiplication: A is [{}, {}], B is [{}, {}]",
+                m, k, b.shape()[0], n
+            ));
+        }
+
+        // --- Optimization Step 1: Transpose matrix B ---
+        // This makes column access from B become contiguous row access in B_t.
+        // This is crucial for cache performance and effective SIMD.
+        let mut b_t_data = vec![0.0; k * n];
+        for l in 0..k {
+            for j in 0..n {
+                b_t_data[j * k + l] = b.data[l * n + j];
+            }
+        }
 
         let mut result_data = vec![0.0; m * n];
+
+        // --- Optimization Step 2: Parallelize over the rows of the output matrix ---
+        // This is the same excellent parallel structure you already had.
         result_data
             .par_chunks_mut(n)
             .enumerate()
-            .for_each(|(i, row)| {
-                for (j, row_val) in row.iter_mut().enumerate() {
-                    *row_val = (0..k).map(|l| a.data[i * k + l] * b.data[l * n + j]).sum();
+            .for_each(|(i, result_row)| {
+                // Get the i-th row of A. This will be reused for all columns in the result.
+                let a_row = &a.data[i * k..(i + 1) * k];
+
+                for j in 0..n {
+                    // Get the j-th row of the transposed B matrix.
+                    let b_t_row = &b_t_data[j * k..(j + 1) * k];
+
+                    // --- Optimization Step 3: SIMD dot product ---
+                    const SIMD_WIDTH: usize = 8*2*2; // For f32x8
+                    let mut sum_vec = f32x8::splat(0.0);
+
+                    // Process the bulk of the data in SIMD chunks
+                    let chunks = k / SIMD_WIDTH;
+                    for l in 0..chunks {
+                        let offset = l * SIMD_WIDTH;
+                        let a_chunk = f32x8::from_slice(&a_row[offset..]);
+                        let b_chunk = f32x8::from_slice(&b_t_row[offset..]);
+
+                        // Fused Multiply-Add is faster than separate multiply and add
+                        sum_vec = a_chunk.mul_add(b_chunk, sum_vec);
+                    }
+
+                    // Horizontally sum the partial sums in the SIMD vector
+                    let mut dot_product = sum_vec.reduce_sum();
+
+                    // Process any remaining elements that didn't fit in a SIMD chunk
+                    let remainder_start = chunks * SIMD_WIDTH;
+                    for l in remainder_start..k {
+                        dot_product += a_row[l] * b_t_row[l];
+                    }
+
+                    result_row[j] = dot_product;
                 }
             });
 
         Ok(Tensor::from_vec(result_data, &[m, n], a.device).unwrap())
+    }
+}
+
+impl ShapeOps for CpuSimdPar {
+    fn transpose(tensor: &Tensor) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::transpose");
+        let axes: Vec<usize> = (0..tensor.rank()).rev().collect();
+        CpuSimdPar::transpose_axes(tensor, &axes)
+    }
+
+    fn transpose_axes(tensor: &Tensor, axes: &[usize]) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::transpose_axes");
+        let rank = tensor.rank();
+        if axes.len() != rank {
+            return Err(format!(
+                "Axes length {} does not match tensor rank {}",
+                axes.len(),
+                rank
+            ));
+        }
+
+        // Calculate new shape
+        let new_dims: Vec<usize> = axes.iter().map(|&i| tensor.shape()[i]).collect();
+        let new_shape = Shape::new(&new_dims);
+        let new_len = new_shape.len();
+        let mut new_data = vec![0.0f32; new_len]; // Use f32 for SIMD
+
+        let old_strides = tensor.shape.strides();
+        let new_strides = new_shape.strides();
+
+        // Process in blocks for better cache locality
+        let block_size = 64; // Cache line friendly block size
+
+        // Use par_chunks_mut for safe, parallel, in-place mutation.
+        new_data
+            .par_chunks_mut(block_size)
+            .enumerate() // Get the index of the block to calculate the global offset
+            .for_each(|(block_idx, chunk)| {
+                let start_idx = block_idx * block_size;
+
+                // Process each chunk with SIMD
+                // `base_i` is the index *within the chunk*
+                for base_i in (0..chunk.len()).step_by(8) {
+                    let remaining = (chunk.len() - base_i).min(8);
+
+                    // The global index into the destination tensor
+                    let global_base_idx = start_idx + base_i;
+
+                    if remaining < 8 {
+                        // Handle remaining elements that don't fit in SIMD chunk
+                        for i in 0..remaining {
+                            let idx = global_base_idx + i;
+                            let mut old_indices = vec![0; rank];
+                            let mut temp_index = idx;
+
+                            // Calculate multi-dimensional indices
+                            for (j, &stride) in new_strides.iter().enumerate() {
+                                old_indices[axes[j]] = temp_index / stride;
+                                temp_index %= stride;
+                            }
+
+                            // Calculate linear index in the original tensor
+                            let old_i = old_indices
+                                .iter()
+                                .enumerate()
+                                .fold(0, |acc, (j, &idx_val)| acc + idx_val * old_strides[j]);
+
+                            chunk[base_i + i] = tensor.data[old_i];
+                        }
+                    } else {
+                        // Process full SIMD chunk
+                        let indices: [usize; 8] = [0, 1, 2, 3, 4, 5, 6, 7].map(|i| {
+                            let idx = global_base_idx + i;
+                            let mut old_indices = vec![0; rank];
+                            let mut temp_index = idx;
+
+                            // Calculate multi-dimensional indices
+                            for j in 0..rank - 1 {
+                                old_indices[axes[j]] = temp_index / new_strides[j];
+                                temp_index %= new_strides[j];
+                            }
+                            old_indices[axes[rank - 1]] = temp_index;
+
+                            // Calculate linear index in the original tensor
+                            old_indices
+                                .iter()
+                                .enumerate()
+                                .fold(0, |acc, (j, &idx_val)| acc + idx_val * old_strides[j])
+                        });
+
+                        // Gather values using SIMD
+                        let values = {
+                            // Using gather is often faster but requires unsafe in stable Rust for now
+                            // std::simd::f32x8::gather_or_default(&tensor.data, std::simd::Simd::from_array(indices))
+                            // The following is a safe alternative if you can't use nightly/unsafe
+                            std::simd::f32x8::from_array([
+                                tensor.data[indices[0]],
+                                tensor.data[indices[1]],
+                                tensor.data[indices[2]],
+                                tensor.data[indices[3]],
+                                tensor.data[indices[4]],
+                                tensor.data[indices[5]],
+                                tensor.data[indices[6]],
+                                tensor.data[indices[7]],
+                            ])
+                        };
+
+                        // Store the gathered values directly into the mutable chunk
+                        values.copy_to_slice(&mut chunk[base_i..base_i + 8]);
+                    }
+                }
+            });
+
+        Ok(Tensor {
+            data: Arc::new(new_data),
+            shape: new_shape,
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
     }
 }
 
@@ -632,6 +799,31 @@ impl CreationOps for CpuSimdPar {
 
         Ok(Tensor {
             data: std::sync::Arc::new(data),
+            shape: shape_obj,
+            device,
+            dtype: crate::tensor::DType::F32,
+        })
+    }
+    fn from_slice(
+        data: &[f32],
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
+        trace_fn!("CpuSimdPar::from_slice");
+        let shape_obj = crate::tensor::Shape::new(shape);
+
+        // Validate that the data length matches the shape
+        if data.len() != shape_obj.len() {
+            return Err(format!(
+                "Data length {} does not match shape {:?} (expected {})",
+                data.len(),
+                shape_obj.dims(),
+                shape_obj.len()
+            ));
+        }
+
+        Ok(Tensor {
+            data: std::sync::Arc::new(data.to_vec()),
             shape: shape_obj,
             device,
             dtype: crate::tensor::DType::F32,

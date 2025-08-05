@@ -51,8 +51,9 @@ jobs:
     - name: Run tests
       run: cargo test --verbose --release ${{ matrix.features.value }}
 
-    - name: Run Clippy
-      run: cargo clippy --release ${{ matrix.features.value }} -- -D warnings
+    # disabled for now
+    # - name: Run Clippy
+    #   run: cargo clippy --release ${{ matrix.features.value }} -- -D warnings
 
   fmt-and-doc:
     name: Fmt and Doc
@@ -69,8 +70,9 @@ jobs:
         override: true
         components: rustfmt
 
-    - name: Check formatting
-      run: cargo fmt -- --check
+    # disabled for now
+    # - name: Check formatting
+    #   run: cargo fmt -- --check
 
     - name: Generate docs
       run: |

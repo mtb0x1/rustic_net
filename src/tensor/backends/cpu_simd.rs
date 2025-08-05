@@ -11,10 +11,13 @@
 //! - Maintains numerical consistency with non-SIMD implementations
 
 use super::traits::*;
-use crate::tensor::Tensor;
+use crate::tensor::{Shape, Tensor};
 use crate::trace_fn;
-use std::simd::{cmp::SimdPartialOrd, f32x8};
+use std::simd::num::SimdFloat;
+use std::simd::StdFloat;
+use std::simd::{cmp::SimdPartialOrd, f32x8, Simd};
 use std::sync::Arc;
+use tracing::debug;
 
 /// Marker type for the SIMD CPU backend.
 ///
@@ -622,6 +625,32 @@ impl CreationOps for CpuSimd {
             dtype: crate::tensor::DType::F32,
         })
     }
+
+    fn from_slice(
+        data: &[f32],
+        shape: &[usize],
+        device: crate::tensor::Device,
+    ) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::from_slice");
+        let shape_obj = crate::tensor::Shape::new(shape);
+
+        // Validate that the data length matches the shape
+        if data.len() != shape_obj.len() {
+            return Err(format!(
+                "Data length {} does not match shape {:?} (expected {})",
+                data.len(),
+                shape_obj.dims(),
+                shape_obj.len()
+            ));
+        }
+
+        Ok(Tensor {
+            data: std::sync::Arc::new(data.to_vec()),
+            shape: shape_obj,
+            device,
+            dtype: crate::tensor::DType::F32,
+        })
+    }
 }
 
 impl MatOps for CpuSimd {
@@ -639,19 +668,175 @@ impl MatOps for CpuSimd {
         let n = b.shape()[1];
         let k = a.shape()[1];
 
+        let a_data = &a.data;
+        // Transposing B is still beneficial as it makes memory access for B's data
+        // sequential in the inner loop, which is ideal for SIMD.
+        let b_t = b.transpose()?;
+        let b_t_data = &b_t.data;
+        debug!("Transposed b into b_t");
+
         let mut result_data = vec![0.0; m * n];
 
-        for i in 0..m {
-            for j in 0..n {
-                let mut sum = 0.0;
-                for l in 0..k {
-                    sum += a.data[i * k + l] * b.data[l * n + j];
+        const LANES: usize = 8*2*2; // Using f32x8 for AVX2
+
+        // --- Tiling/Blocking Optimization ---
+        // These tile sizes can be tuned for specific CPU caches.
+        // They define the size of the sub-matrices we will work on at a time.
+        // A 64x32 tile of f32s is 8KB, which fits comfortably in L1/L2 cache.
+        const TILE_M: usize = 64; // Tile size for the M dimension (rows of A)
+        const TILE_N: usize = 64; // Tile size for the N dimension (columns of B)
+        const TILE_K: usize = 32; // Tile size for the K dimension (inner dimension)
+
+        // Iterate over the matrices in tiles
+        for i0 in (0..m).step_by(TILE_M) {
+            for j0 in (0..n).step_by(TILE_N) {
+                for k0 in (0..k).step_by(TILE_K) {
+                    // Get the actual boundaries for the current tile, handling edge cases
+                    let i_max = std::cmp::min(i0 + TILE_M, m);
+                    let j_max = std::cmp::min(j0 + TILE_N, n);
+                    let k_max = std::cmp::min(k0 + TILE_K, k);
+
+                    // --- Mini-kernel to multiply the tiles ---
+                    // C[i0..i_max, j0..j_max] += A[i0..i_max, k0..k_max] * B_t[j0..j_max, k0..k_max]^T
+                    for i in i0..i_max {
+                        // Row in the result tile
+                        for j in j0..j_max {
+                            // Column in the result tile
+
+                            // Perform the dot product for the k-tile using SIMD
+                            let a_row_offset = i * k;
+                            let b_t_row_offset = j * k;
+
+                            // Slices for the k-tile are contiguous for both A and B_t
+                            let a_slice = &a_data[a_row_offset + k0..a_row_offset + k_max];
+                            let b_t_slice = &b_t_data[b_t_row_offset + k0..b_t_row_offset + k_max];
+
+                            let (a_chunks, a_rem) = a_slice.as_chunks::<LANES>();
+                            let (b_chunks, b_rem) = b_t_slice.as_chunks::<LANES>();
+
+                            // Vectorized dot product
+                            let mut sum_vec = f32x8::splat(0.0);
+                            for (a_chunk, b_chunk) in a_chunks.iter().zip(b_chunks.iter()) {
+                                let a_vec = f32x8::from_slice(a_chunk);
+                                let b_vec = f32x8::from_slice(b_chunk);
+                                // Fused Multiply-Add: sum_vec += a_vec * b_vec
+                                sum_vec = a_vec.mul_add(b_vec, sum_vec);
+                            }
+
+                            // Horizontal sum to reduce the SIMD vector to a single f32
+                            let mut sum = sum_vec.reduce_sum();
+
+                            // Handle the remainder elements
+                            for (a_val, b_val) in a_rem.iter().zip(b_rem.iter()) {
+                                sum += a_val * b_val;
+                            }
+
+                            // Accumulate the partial sum into the result matrix
+                            result_data[i * n + j] += sum;
+                        }
+                    }
                 }
-                result_data[i * n + j] = sum;
             }
         }
 
+        debug!("Finished matmul main loop");
         Ok(Tensor::from_vec(result_data, &[m, n], a.device).unwrap())
+    }
+}
+
+impl ShapeOps for CpuSimd {
+    fn transpose(tensor: &Tensor) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::transpose");
+        let axes: Vec<usize> = (0..tensor.rank()).rev().collect();
+        CpuSimd::transpose_axes(tensor, &axes)
+    }
+
+    fn transpose_axes(tensor: &Tensor, axes: &[usize]) -> Result<Tensor, String> {
+        trace_fn!("CpuSimd::transpose_axes");
+        let rank = tensor.rank();
+        if axes.len() != rank {
+            return Err(format!(
+                "Axes length {} does not match tensor rank {}",
+                axes.len(),
+                rank
+            ));
+        }
+
+        // --- OPTIMIZATION: Fast Path for 2D Matrix Transposition ---
+        // The generic transpose below is very slow due to poor cache locality.
+        // We add a specialized implementation for the most common case: a 2D matrix
+        // transpose, which is heavily used by matmul. This uses a tiling/blocking
+        // algorithm to maximize cache performance.
+        if rank == 2 && axes == [1, 0] {
+            let rows = tensor.shape()[0];
+            let cols = tensor.shape()[1];
+            let mut new_data = vec![0.0; rows * cols];
+
+            // Define a tile size. A 32x32 block of f32 is 4KB, which fits well
+            // into L1/L2 caches on most modern CPUs.
+            const TILE_SIZE: usize = 32;
+
+            // Iterate over the matrix in tiles
+            for i in (0..rows).step_by(TILE_SIZE) {
+                for j in (0..cols).step_by(TILE_SIZE) {
+                    // Transpose the tile
+                    let row_limit = std::cmp::min(i + TILE_SIZE, rows);
+                    let col_limit = std::cmp::min(j + TILE_SIZE, cols);
+
+                    for row in i..row_limit {
+                        for col in j..col_limit {
+                            // Read from source[row][col] and write to dest[col][row]
+                            // This access pattern is highly cache-efficient within the tile.
+                            new_data[col * rows + row] = tensor.data[row * cols + col];
+                        }
+                    }
+                }
+            }
+
+            return Ok(Tensor {
+                data: Arc::new(new_data),
+                shape: Shape::new(&[cols, rows]),
+                device: tensor.device,
+                dtype: tensor.dtype,
+            });
+        }
+
+        // --- Fallback to Generic (but slow) Transpose for other cases ---
+        // This original code is correct for any rank but has poor performance.
+        // It is kept for correctness with tensors of rank != 2.
+        let new_dims: Vec<usize> = axes.iter().map(|&i| tensor.shape()[i]).collect();
+        let new_shape = Shape::new(&new_dims);
+        let new_len = new_shape.len();
+        let mut new_data = vec![0.0; new_len];
+
+        let old_strides = tensor.shape.strides();
+        let new_strides = new_shape.strides();
+
+        // NOTE: This is the slow part that is being bypassed by the fast path above.
+        for idx in 0..new_len {
+            let mut old_indices = vec![0; rank];
+            let mut temp_index = idx;
+
+            // Calculate multi-dimensional indices in the transposed tensor
+            for (j, &stride) in new_strides.iter().enumerate() {
+                old_indices[axes[j]] = temp_index / stride;
+                temp_index %= stride;
+            }
+
+            // Calculate linear index in the original tensor
+            let mut old_i = 0;
+            for (j, &index) in old_indices.iter().enumerate() {
+                old_i += index * old_strides[j];
+            }
+            new_data[idx] = tensor.data[old_i];
+        }
+
+        Ok(Tensor {
+            data: Arc::new(new_data),
+            shape: new_shape,
+            device: tensor.device,
+            dtype: tensor.dtype,
+        })
     }
 }
 

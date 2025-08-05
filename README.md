@@ -45,14 +45,14 @@ Rustic Net includes parallel implementations of key operations to maximize perfo
 
 ### Enabling Parallel Processing
 
-Parallel features are enabled by default. You can control the number of threads using the `RAYON_NUM_THREADS` environment variable:
+Parallel features are enabled by default. You can control the number of threads using the `RUSTIC_NET_NUM_THREADS` environment variable:
 
 ```bash
 # Use 4 threads for parallel operations
-RAYON_NUM_THREADS=4 cargo run --example tensor_operations
+RUSTIC_NET_NUM_THREADS=4 cargo run --example tensor_operations
 
 # Use all available CPU cores
-RAYON_NUM_THREADS=0 cargo run --example tensor_operations
+RUSTIC_NET_NUM_THREADS=0 cargo run --example tensor_operations
 ```
 
 ## 📂 Project Structure
