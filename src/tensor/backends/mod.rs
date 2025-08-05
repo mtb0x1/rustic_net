@@ -27,17 +27,16 @@
 //! - `cpu_par`: A multi-threaded backend that uses rayon.
 //! - `cpu_simd_par`: A multi-threaded backend that uses both rayon and SIMD instructions.
 
-pub mod cpu_seq;
 pub mod traits;
 
-#[cfg(feature = "simd")]
-pub mod cpu_simd;
-
-#[cfg(feature = "parallel")]
-pub mod cpu_par;
-
-#[cfg(feature = "simd_and_parallel")]
-pub mod cpu_simd_par;
+#[cfg(all(
+    not(feature = "parallel"),
+    not(feature = "simd"),
+    not(feature = "simd_and_parallel"),
+    not(feature = "cuda"),
+    not(feature = "webgpu")
+))]
+pub mod cpu_seq;
 
 #[cfg(all(
     not(feature = "parallel"),
@@ -48,11 +47,21 @@ pub mod cpu_simd_par;
 ))]
 pub use cpu_seq::CpuSequential as Cpu;
 
+
+#[cfg(feature = "simd")]
+pub mod cpu_simd;
+
 #[cfg(feature = "simd")]
 pub use cpu_simd::CpuSimd as Cpu;
 
 #[cfg(feature = "parallel")]
+pub mod cpu_par;
+
+#[cfg(feature = "parallel")]
 pub use cpu_par::CpuParallel as Cpu;
+
+#[cfg(feature = "simd_and_parallel")]
+pub mod cpu_simd_par;
 
 #[cfg(feature = "simd_and_parallel")]
 pub use cpu_simd_par::CpuSimdPar as Cpu;

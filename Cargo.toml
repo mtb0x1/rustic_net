@@ -5,6 +5,10 @@ edition = "2021"
 authors = ["mtb0x1 <mtb0x10x1@gmail.com>"]
 license-file = "LICENSE"
 
+[package.metadata.docs.rs]
+features = ["parallel", "simd", "simd_and_parallel", "cuda", "webgpu"]
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = []
 parallel = ["dep:rayon", "dep:rand_chacha", "dep:lazy_static"]
