@@ -34,22 +34,22 @@ fn test_tensor_creation() {
     setup();
     let t = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default()).unwrap();
     assert_eq!(t.shape(), &[3]);
-    assert_eq!(t.to_vec(), vec![1.0, 2.0, 3.0]);
+    assert_eq!(t.to_vec(), &vec![1.0, 2.0, 3.0]);
 }
 
 #[test]
 fn test_tensor_creation_zeros_ones_identity() {
     setup();
     let t_zeros = Tensor::zeros(&[2, 3], Device::default());
-    assert_eq!(t_zeros.to_vec(), vec![0.0; 6]);
+    assert_eq!(t_zeros.to_vec(), &vec![0.0; 6]);
 
     let t_ones = Tensor::ones(&[2, 3], Device::default());
-    assert_eq!(t_ones.to_vec(), vec![1.0; 6]);
+    assert_eq!(t_ones.to_vec(), &vec![1.0; 6]);
 
     let t_identity = Tensor::identity(3, Device::default());
     assert_eq!(
         t_identity.to_vec(),
-        vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+        &vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
     );
 }
 
@@ -72,11 +72,11 @@ fn test_tensor_operations() {
 
     // Test element-wise addition
     let c = a.add(&b).unwrap();
-    assert_eq!(c.to_vec(), vec![5.0, 7.0, 9.0]);
+    assert_eq!(c.to_vec(), &vec![5.0, 7.0, 9.0]);
 
     // Test reduction
     let e = c.sum(None).unwrap();
-    assert_eq!(e.to_vec(), vec![21.0]);
+    assert_eq!(e.to_vec(), &vec![21.0]);
 }
 
 #[test]
@@ -86,13 +86,13 @@ fn test_tensor_binary_ops() {
     let b = Tensor::from_vec(vec![4.0, 5.0, 6.0], &[3], Device::default()).unwrap();
 
     let sub_res = a.sub(&b).unwrap();
-    assert_eq!(sub_res.to_vec(), vec![-3.0, -3.0, -3.0]);
+    assert_eq!(sub_res.to_vec(), &vec![-3.0, -3.0, -3.0]);
 
     let mul_res = a.mul(&b).unwrap();
-    assert_eq!(mul_res.to_vec(), vec![4.0, 10.0, 18.0]);
+    assert_eq!(mul_res.to_vec(), &vec![4.0, 10.0, 18.0]);
 
     let div_res = a.div(&b).unwrap();
-    assert_eq!(div_res.to_vec(), vec![0.25, 0.4, 0.5]);
+    assert_eq!(div_res.to_vec(), &vec![0.25, 0.4, 0.5]);
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn test_tensor_unary_ops() {
     setup();
     let a = Tensor::from_vec(vec![-1.0, 0.0, 1.0], &[3], Device::default()).unwrap();
     let relu_res = a.relu().unwrap();
-    assert_eq!(relu_res.to_vec(), vec![0.0, 0.0, 1.0]);
+    assert_eq!(relu_res.to_vec(), &vec![0.0, 0.0, 1.0]);
 }
 
 #[test]
@@ -114,13 +114,13 @@ fn test_tensor_reductions() {
     .unwrap();
 
     let mean_res = a.mean(None).unwrap();
-    assert_eq!(mean_res.to_vec(), vec![3.5]);
+    assert_eq!(mean_res.to_vec(), &vec![3.5]);
 
     let max_res = a.max(None).unwrap();
-    assert_eq!(max_res.to_vec(), vec![6.0]);
+    assert_eq!(max_res.to_vec(), &vec![6.0]);
 
     let min_res = a.min(None).unwrap();
-    assert_eq!(min_res.to_vec(), vec![1.0]);
+    assert_eq!(min_res.to_vec(), &vec![1.0]);
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn test_matmul() {
     let a = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], &[2, 2], Device::default()).unwrap();
     let b = Tensor::from_vec(vec![5.0, 6.0, 7.0, 8.0], &[2, 2], Device::default()).unwrap();
     let matmul_res = a.matmul(&b).unwrap();
-    assert_eq!(matmul_res.to_vec(), vec![19.0, 22.0, 43.0, 50.0]);
+    assert_eq!(matmul_res.to_vec(), &vec![19.0, 22.0, 43.0, 50.0]);
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn test_reshape() {
     let t = Tensor::arange(0.0, 6.0, Device::default());
     let t = t.reshape(&[2, 3]).unwrap();
     assert_eq!(t.shape(), &[2, 3]);
-    assert_eq!(t.to_vec(), vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+    assert_eq!(t.to_vec(), &vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn test_transpose() {
     .unwrap();
     let t_t = t.transpose().unwrap();
     assert_eq!(t_t.shape(), &[3, 2]);
-    assert_eq!(t_t.to_vec(), vec![0.0, 3.0, 1.0, 4.0, 2.0, 5.0]);
+    assert_eq!(t_t.to_vec(), &vec![0.0, 3.0, 1.0, 4.0, 2.0, 5.0]);
 }
 
 #[test]

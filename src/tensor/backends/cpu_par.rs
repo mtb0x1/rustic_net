@@ -87,7 +87,7 @@ impl UnaryOps for CpuParallel {
     /// # use rustic_net::tensor::backends::traits::UnaryOps;
     /// let t = Tensor::from_vec(vec![1.0, -2.0, 3.0, -4.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuParallel::relu(&t).unwrap();
-    /// assert_eq!(result.to_vec(), vec![1.0, 0.0, 3.0, 0.0]);
+    /// assert_eq!(result.to_vec(), &vec![1.0, 0.0, 3.0, 0.0]);
     /// ```
     fn relu(tensor: &Tensor) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::relu");
@@ -132,7 +132,7 @@ impl BinaryElementwiseOps for CpuParallel {
     /// let a = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], &[2, 2], Device::default()).unwrap();
     /// let b = Tensor::from_vec(vec![5.0, 6.0, 7.0, 8.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuParallel::add(&a, &b).unwrap();
-    /// assert_eq!(result.to_vec(), vec![6.0, 8.0, 10.0, 12.0]);
+    /// assert_eq!(result.to_vec(), &vec![6.0, 8.0, 10.0, 12.0]);
     /// ```
     fn add(a: &Tensor, b: &Tensor) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::add");
@@ -439,7 +439,7 @@ impl ScalarOps for CpuParallel {
     /// # use rustic_net::tensor::backends::traits::ScalarOps;
     /// let t = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default()).unwrap();
     /// let result = CpuParallel::sub_scalar(&t, 5.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![-4.0, -3.0, -2.0]);
+    /// assert_eq!(result.to_vec(), &vec![-4.0, -3.0, -2.0]);
     /// ```
     fn sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::sub_scalar");
@@ -473,7 +473,7 @@ impl ScalarOps for CpuParallel {
     /// # use rustic_net::tensor::backends::traits::ScalarOps;
     /// let t = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default()).unwrap();
     /// let result = CpuParallel::mul_scalar(&t, 2.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0]);
+    /// assert_eq!(result.to_vec(), &vec![2.0, 4.0, 6.0]);
     /// ```
     fn mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::mul_scalar");
@@ -510,7 +510,7 @@ impl ScalarOps for CpuParallel {
     /// # use rustic_net::tensor::backends::traits::ScalarOps;
     /// let t = Tensor::from_vec(vec![2.0, 4.0, 6.0], &[3], Device::default()).unwrap();
     /// let result = CpuParallel::div_scalar(&t, 2.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![1.0, 2.0, 3.0]);
+    /// assert_eq!(result.to_vec(), &vec![1.0, 2.0, 3.0]);
     /// ```
     fn div_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::div_scalar");
@@ -549,7 +549,7 @@ impl ScalarOps for CpuParallel {
     /// # use rustic_net::tensor::backends::traits::ScalarOps;
     /// let t = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default()).unwrap();
     /// let result = CpuParallel::r_add_scalar(&t, 5.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![6.0, 7.0, 8.0]);
+    /// assert_eq!(result.to_vec(), &vec![6.0, 7.0, 8.0]);
     /// ```
     fn r_add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::r_add_scalar");
@@ -585,7 +585,7 @@ impl ScalarOps for CpuParallel {
     /// # use rustic_net::tensor::backends::traits::ScalarOps;
     /// let t = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default()).unwrap();
     /// let result = CpuParallel::r_sub_scalar(&t, 5.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![4.0, 3.0, 2.0]);
+    /// assert_eq!(result.to_vec(), &vec![4.0, 3.0, 2.0]);
     /// ```
     fn r_sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::r_sub_scalar");
@@ -621,7 +621,7 @@ impl ScalarOps for CpuParallel {
     /// # use rustic_net::tensor::backends::traits::ScalarOps;
     /// let t = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default()).unwrap();
     /// let result = CpuParallel::r_mul_scalar(&t, 2.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0]);
+    /// assert_eq!(result.to_vec(), &vec![2.0, 4.0, 6.0]);
     /// ```
     fn r_mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::r_mul_scalar");
@@ -795,10 +795,10 @@ impl CreationOps for CpuParallel {
     /// # use rustic_net::tensor::backends::cpu_par::CpuParallel;
     /// # use rustic_net::tensor::backends::traits::CreationOps;
     /// let t = CpuParallel::arange(2.0, 5.0, Device::default()).unwrap();
-    /// assert_eq!(t.to_vec(), vec![2.0, 3.0, 4.0]);
+    /// assert_eq!(t.to_vec(), &vec![2.0, 3.0, 4.0]);
     ///
     /// let t = CpuParallel::arange(5.0, 2.0, Device::default()).unwrap();
-    /// assert_eq!(t.to_vec(), vec![5.0, 4.0, 3.0]);
+    /// assert_eq!(t.to_vec(), &vec![5.0, 4.0, 3.0]);
     /// ```
     fn arange(start: f32, end: f32, device: crate::tensor::Device) -> Result<Tensor, String> {
         trace_fn!("CpuParallel::arange");

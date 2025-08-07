@@ -28,6 +28,7 @@
 //! - `cpu_simd_par`: A multi-threaded backend that uses both rayon and SIMD instructions.
 
 pub mod traits;
+pub mod utils;
 
 #[cfg(all(
     not(feature = "parallel"),

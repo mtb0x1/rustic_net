@@ -11,6 +11,7 @@
 //! - Maintains numerical consistency with non-SIMD implementations
 
 use super::traits::*;
+use crate::tensor::backends::utils::LANES;
 use crate::tensor::{Shape, Tensor};
 use crate::trace_fn;
 use std::simd::num::SimdFloat;
@@ -58,7 +59,7 @@ impl UnaryOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![-1.0, 0.5, -0.5, 2.0], &[2, 2], Device::default()).unwrap();
     /// let output = CpuSimd::relu(&input).unwrap();
-    /// assert_eq!(output.to_vec(), vec![0.0, 0.5, 0.0, 2.0]);
+    /// assert_eq!(output.to_vec(), &vec![0.0, 0.5, 0.0, 2.0]);
     /// ```
     fn relu(tensor: &Tensor) -> Result<Tensor, String> {
         trace_fn!("CpuSimd::relu");
@@ -126,7 +127,7 @@ impl ScalarOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuSimd::add_scalar(&input, 5.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![6.0, 7.0, 8.0, 9.0]);
+    /// assert_eq!(result.to_vec(), &vec![6.0, 7.0, 8.0, 9.0]);
     /// ```
     fn add_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuSimd::add_scalar");
@@ -179,7 +180,7 @@ impl ScalarOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![5.0, 7.0, 9.0, 11.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuSimd::sub_scalar(&input, 3.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0, 8.0]);
+    /// assert_eq!(result.to_vec(), &vec![2.0, 4.0, 6.0, 8.0]);
     /// ```
     fn sub_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuSimd::sub_scalar");
@@ -232,7 +233,7 @@ impl ScalarOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuSimd::mul_scalar(&input, 2.5).unwrap();
-    /// assert_eq!(result.to_vec(), vec![2.5, 5.0, 7.5, 10.0]);
+    /// assert_eq!(result.to_vec(), &vec![2.5, 5.0, 7.5, 10.0]);
     /// ```
     fn mul_scalar(tensor: &Tensor, scalar: f32) -> Result<Tensor, String> {
         trace_fn!("CpuSimd::mul_scalar");
@@ -287,7 +288,7 @@ impl ScalarOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![10.0, 20.0, 30.0, 40.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuSimd::div_scalar(&input, 5.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0, 8.0]);
+    /// assert_eq!(result.to_vec(), &vec![2.0, 4.0, 6.0, 8.0]);
     /// ```
     ///
     /// # Panics
@@ -347,7 +348,7 @@ impl ScalarOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuSimd::r_add_scalar(&input, 5.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![6.0, 7.0, 8.0, 9.0]);
+    /// assert_eq!(result.to_vec(), &vec![6.0, 7.0, 8.0, 9.0]);
     /// ```
     ///
     /// # Note
@@ -406,7 +407,7 @@ impl ScalarOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuSimd::r_sub_scalar(&input, 5.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![4.0, 3.0, 2.0, 1.0]);
+    /// assert_eq!(result.to_vec(), &vec![4.0, 3.0, 2.0, 1.0]);
     /// ```
     ///
     /// # Note
@@ -464,7 +465,7 @@ impl ScalarOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuSimd::r_mul_scalar(&input, 2.5).unwrap();
-    /// assert_eq!(result.to_vec(), vec![2.5, 5.0, 7.5, 10.0]);
+    /// assert_eq!(result.to_vec(), &vec![2.5, 5.0, 7.5, 10.0]);
     /// ```
     ///
     /// # Note
@@ -524,7 +525,7 @@ impl ScalarOps for CpuSimd {
     /// # use rustic_net::tensor::{Tensor, Device};
     /// let input = Tensor::from_vec(vec![1.0, 2.0, 4.0, 8.0], &[2, 2], Device::default()).unwrap();
     /// let result = CpuSimd::r_div_scalar(&input, 16.0).unwrap();
-    /// assert_eq!(result.to_vec(), vec![16.0, 8.0, 4.0, 2.0]);
+    /// assert_eq!(result.to_vec(), &vec![16.0, 8.0, 4.0, 2.0]);
     /// ```
     ///
     /// # Panics
@@ -676,8 +677,6 @@ impl MatOps for CpuSimd {
         debug!("Transposed b into b_t");
 
         let mut result_data = vec![0.0; m * n];
-
-        const LANES: usize = 8*2*2; // Using f32x8 for AVX2
 
         // --- Tiling/Blocking Optimization ---
         // These tile sizes can be tuned for specific CPU caches.

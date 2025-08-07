@@ -1,5 +1,5 @@
 #[cfg(feature = "parallel")]
-use rustic_net::parallel::{current_num_threads, init_thread_pool, recommended_chunk_size};
+use rustic_net::{current_num_threads, init_thread_pool, recommended_chunk_size};
 
 #[cfg(feature = "parallel")]
 #[test]

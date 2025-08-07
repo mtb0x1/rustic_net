@@ -1,7 +1,7 @@
-//! # Parallel Computation Utilities
+//! # Internal Parallel Computation Utilities
 //!
-//! Provides thread pool management and parallel execution primitives for Rustic Net.
-//! Leverages Rayon for efficient work-stealing parallelism with automatic load balancing.
+//! Provides thread pool management and parallel execution primitives for Rustic Net's CPU backends.
+//! This is an internal module and not part of the public API.
 //!
 //! ## Features
 //! - Automatic thread pool configuration with optimal defaults
@@ -11,26 +11,16 @@
 //! - Work-stealing scheduler for load balancing
 //! - Automatic chunk sizing for parallel iterators
 //!
-//! ## Usage
-//! The thread pool is automatically initialized when needed, but you can also initialize it explicitly:
-//! ```rust
-//! use rustic_net::init_thread_pool;
+//! ## Internal Usage Only
+//! This module is used internally by the CPU parallel backends. The thread pool is automatically
+//! initialized when needed by the parallel backends.
 //!
-//! // Initialize with default settings (80% of available cores)
-//! init_thread_pool();
-//!
-//! // Or set a custom thread count via environment variable
-//! // RUSTIC_NET_NUM_THREADS=4 cargo run
-//! ```
-//!
-//! ## Performance Considerations
-//! - The default thread count (80% of cores) provides a good balance between
-//!   parallelism and system responsiveness
-//! - For I/O-bound workloads, consider increasing the thread count
-//! - For CPU-bound workloads, the default is usually optimal
-//! - Set `RUSTIC_NET_NUM_THREADS=1` to disable parallelism for debugging
+//! ## Environment Variables
+//! - `RUSTIC_NET_NUM_THREADS`: Override the number of threads to use
 
 use crate::trace_fn;
+use rayon::prelude::*;
+use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 use std::thread::available_parallelism;
@@ -44,8 +34,6 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Synchronization primitive for thread-safe one-time initialization
 static INIT: Once = Once::new();
-
-use {rayon, std::env};
 
 /// Initializes the global thread pool with optimal settings.
 ///

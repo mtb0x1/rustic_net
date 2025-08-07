@@ -10,6 +10,7 @@
 //! - Ideal for large-scale numerical computations on modern CPUs
 
 use super::traits::*;
+use crate::tensor::backends::utils::LANES;
 use crate::tensor::{Shape, Tensor};
 use crate::trace_fn;
 use rayon::prelude::*;
@@ -264,13 +265,12 @@ impl MatOps for CpuSimdPar {
                     let b_t_row = &b_t_data[j * k..(j + 1) * k];
 
                     // --- Optimization Step 3: SIMD dot product ---
-                    const SIMD_WIDTH: usize = 8*2*2; // For f32x8
                     let mut sum_vec = f32x8::splat(0.0);
 
                     // Process the bulk of the data in SIMD chunks
-                    let chunks = k / SIMD_WIDTH;
+                    let chunks = k / LANES;
                     for l in 0..chunks {
-                        let offset = l * SIMD_WIDTH;
+                        let offset = l * LANES;
                         let a_chunk = f32x8::from_slice(&a_row[offset..]);
                         let b_chunk = f32x8::from_slice(&b_t_row[offset..]);
 
@@ -282,7 +282,7 @@ impl MatOps for CpuSimdPar {
                     let mut dot_product = sum_vec.reduce_sum();
 
                     // Process any remaining elements that didn't fit in a SIMD chunk
-                    let remainder_start = chunks * SIMD_WIDTH;
+                    let remainder_start = chunks * LANES;
                     for l in remainder_start..k {
                         dot_product += a_row[l] * b_t_row[l];
                     }

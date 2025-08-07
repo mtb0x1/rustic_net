@@ -4,10 +4,10 @@
 //! including parallel processing capabilities.
 
 #[cfg(feature = "parallel")]
-use rustic_net::parallel::init_thread_pool;
+use rustic_net::init_thread_pool;
 use rustic_net::tensor::{Device, Tensor};
-use rustic_net::RusticNetInitTracing;
-use tracing::debug;
+use rustic_net::RusticNetInitTracingWith;
+use tracing::{debug, warn};
 
 #[inline]
 pub fn infer_shape_squareish(size: usize) -> Vec<usize> {
@@ -41,7 +41,16 @@ pub fn infer_shape_aspect(size: usize, target_ratio: f64) -> Vec<usize> {
     vec![best_opt.0, best_opt.1]
 }
 fn main() {
-    RusticNetInitTracing();
+    // Setup tracing yourself
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter("rustic_net=trace,tensor_operations=trace")
+        .with_target(true)
+        .finish();
+
+    RusticNetInitTracingWith(subscriber);
+
+    //wrap all example code under a span
+    let _span = tracing::span!(tracing::Level::TRACE, "tensor_operations").entered();
 
     #[cfg(feature = "parallel")]
     init_thread_pool();
@@ -54,10 +63,17 @@ fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(1_000_000); // Default to 1 million elements if env var not set
+
+    warn!(
+        "====> Tensor size: {}, requested size(RUSTIC_NET_EXAMPLE_TENSOR_SIZE): {:?} <====",
+        size,
+        std::env::var("RUSTIC_NET_EXAMPLE_TENSOR_SIZE").unwrap_or("".to_string())
+    );
+
     let large_data: Vec<f32> = (0..size).map(|x| x as f32).collect();
     //set dimensions from size, shape is &[x,y]    where x*y = size
     let dims = infer_shape_squareish(size);
-    let large_tensor = Tensor::from_vec(large_data.clone(), dims.as_ref(), device.clone()).unwrap();
+    let large_tensor = Tensor::from_vec(large_data, dims.as_ref(), device.clone()).unwrap();
 
     debug!("\n=== Tensor Creation ===");
 
@@ -197,21 +213,30 @@ fn main() {
     debug!("\n=== Benchmarking Operations ===");
 
     // Benchmark sum
-    let sum = large_tensor.sum(None).unwrap();
-    debug!("\nSum of {} elements: {:.2}", size, sum.to_vec()[0]);
+    {
+        let sum = large_tensor.sum(None).unwrap();
+        debug!("\nSum of {} elements: {:.2}", size, sum.to_vec()[0]);
+    }
 
     // Benchmark element-wise operations
     debug!("\nElement-wise addition");
-    let _result = large_tensor.clone() + 1.0;
+    {
+        let _result = large_tensor.clone() + 1.0;
+        debug!("\n addition completed {}", _result.to_vec()[0]);
+    }
 
     debug!(
         "\nBig Matrix multiplication {:?}x{:?}:",
         dims,
         dims.iter().rev().collect::<Vec<&usize>>()
     );
-    let _result = large_tensor
-        .matmul(&large_tensor.transpose().unwrap())
-        .unwrap();
+
+    {
+        let _result = large_tensor
+            .matmul(&large_tensor.transpose().unwrap())
+            .unwrap();
+        debug!("\n Matrix multiplication completed {}", _result.to_vec()[0]);
+    }
 
     debug!("\n=== Example completed!");
     debug!("Check the console output above for detailed tracing information.");

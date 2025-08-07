@@ -86,20 +86,24 @@ pub fn init_tracing() {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("rustic_net=error"));
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_target(true)
-                .with_thread_ids(true)
-                .with_file(true)
-                .with_line_number(true),
-        )
-        .with(filter)
-        .init();
+    let subscriber = tracing_subscriber::registry().with(
+        tracing_subscriber::fmt::layer()
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_file(true)
+            .with_line_number(true),
+    );
+
+    subscriber.with(filter).init();
 
     info!("RusticNet tracing initialized");
 }
 
+pub fn init_tracing_with(subscriber: impl tracing::Subscriber + Send + Sync + 'static) {
+    tracing::subscriber::set_global_default(subscriber).expect("tracing already initialized");
+
+    info!("RusticNet tracing initialized");
+}
 /// A macro to automatically instrument functions with tracing spans.
 ///
 /// This attribute macro can be applied to any function to automatically:

@@ -34,7 +34,7 @@
 //! // Create and manipulate tensors
 //! let t1 = Tensor::from_vec(vec![1.0, 2.0, 3.0], &[3], Device::default())?;
 //! let t2 = t1.relu()?;
-//! assert_eq!(t2.to_vec(), vec![1.0, 2.0, 3.0]);
+//! assert_eq!(t2.to_vec(), &vec![1.0, 2.0, 3.0]);
 //! # Ok::<(), String>(())
 //! ```
 //!
@@ -65,16 +65,14 @@
 //! All public types in this crate are `Send` and `Sync`, making them safe to use across thread boundaries.
 //! The library manages thread pools internally when the `parallel` feature is enabled.
 
-#[cfg(feature = "parallel")]
-pub mod parallel;
-
 pub mod tensor;
 pub(crate) mod tracing;
 
-#[cfg(feature = "parallel")]
-pub use parallel::{current_num_threads, init_thread_pool, recommended_chunk_size};
+#[cfg(any(feature = "parallel", feature = "simd_and_parallel"))]
+pub use crate::tensor::{current_num_threads, init_thread_pool, recommended_chunk_size};
 
 pub use tracing::init_tracing as RusticNetInitTracing;
+pub use tracing::init_tracing_with as RusticNetInitTracingWith;
 
 /// Re-exports for common types
 pub use tensor::{DType, Device, Shape, Tensor};
