@@ -76,7 +76,7 @@ jobs:
 
     - name: Generate docs
       run: |
-        cargo doc --features docsrs --no-deps --document-private-items
+        cargo doc --no-deps --document-private-items
         echo '<!DOCTYPE html>
         <html>
         <head>
